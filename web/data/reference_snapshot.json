@@ -1,0 +1,61 @@
+{
+  "source_notebook": {
+    "path": "/Users/maxabouchar/Documents/github/space_datacenters/space_gpu_datacenter.ipynb",
+    "snapshot_utc": "2026-02-17T06:58:12Z"
+  },
+  "reference_inputs": {
+    "datacenter_mw": 100,
+    "altitude_km": 7000,
+    "gpu_temp_c": 90,
+    "transport_delta_t_c": 30,
+    "overhead_frac": 0.1,
+    "launch_base_cost_per_kg": 3170,
+    "launch_incremental_cost_per_kg_per_km": 0.15,
+    "array_specific_power_w_per_kg": 200,
+    "beta_preset": "coverage_optimized",
+    "beta_mix": [
+      [
+        0,
+        0.3
+      ],
+      [
+        30,
+        0.45
+      ],
+      [
+        60,
+        0.2
+      ],
+      [
+        90,
+        0.05
+      ]
+    ],
+    "launch_preset": "falcon9_dedicated_current",
+    "launch_model": {
+      "base_alt_km": 550,
+      "base_cost_per_kg": 3170,
+      "incremental_cost_per_kg_per_km": 0.15
+    },
+    "mode": "sunonly"
+  },
+  "reference_outputs": {
+    "fleet_capex_usd": 14199705211.94755,
+    "fleet_gpu_cost_usd": 1681152000,
+    "fleet_space_premium_usd": 12518553211.94755,
+    "launch_cost_per_kg_at_altitude": 4137.5,
+    "satellites_needed": 796,
+    "sunlight_fraction_weighted": 0.9525738535529213,
+    "fleet_mass_tonnes": 1432.038713441954,
+    "avg_compute_mw_delivered": 100.08883994051254,
+    "sat_capex_weighted_usd": 17838825.643150188,
+    "fleet_component_costs_usd": {
+      "compute_usd": 1681152000,
+      "array_usd": 5778960000,
+      "radiator_usd": 416533035.0814652,
+      "battery_usd": 0,
+      "bus_usd": 398000000,
+      "launch_usd": 5925060176.866084
+    }
+  }
+}

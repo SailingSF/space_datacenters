@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Space Datacenter Interactive Explorer</title>
+    <link rel="preconnect" href="https://cdn.plot.ly" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">Space Datacenter Feasibility</p>
+      <h1>Interactive Space Premium Explorer</h1>
+      <p>
+        Tune key assumptions from the notebook model and see how much extra CAPEX is required to place
+        equivalent GPU compute in orbit.
+      </p>
+    </header>
+
+    <main class="layout">
+      <aside class="panel controls">
+        <h2>Inputs</h2>
+        <form id="controls-form">
+          <label>
+            Datacenter size to replace
+            <output id="datacenter-mw-value"></output>
+            <input id="datacenter-mw" type="range" />
+          </label>
+
+          <label>
+            Altitude
+            <output id="altitude-km-value"></output>
+            <input id="altitude-km" type="range" />
+          </label>
+
+          <label>
+            GPU temperature
+            <output id="gpu-temp-c-value"></output>
+            <input id="gpu-temp-c" type="range" />
+          </label>
+
+          <label>
+            Transport temperature drop (delta T)
+            <output id="transport-delta-t-c-value"></output>
+            <input id="transport-delta-t-c" type="range" />
+          </label>
+
+          <label>
+            Overhead fraction
+            <output id="overhead-frac-value"></output>
+            <input id="overhead-frac" type="range" />
+          </label>
+
+          <label>
+            Launch cost preset
+            <select id="launch-preset"></select>
+          </label>
+
+          <label>
+            Base launch cost (to baseline altitude)
+            <output id="launch-base-cost-per-kg-value"></output>
+            <input id="launch-base-cost-per-kg" type="range" />
+          </label>
+
+          <label>
+            Incremental launch cost per additional km
+            <output id="launch-incremental-cost-per-kg-per-km-value"></output>
+            <input id="launch-incremental-cost-per-kg-per-km" type="range" />
+          </label>
+
+          <p class="control-note">
+            Launch model: <strong>$/kg to <span id="launch-baseline-altitude-value"></span></strong> +
+            <strong>incremental $/kg/km</strong> above that altitude.
+          </p>
+          <p class="control-note sources">Sources: <span id="launch-preset-source"></span></p>
+
+          <label>
+            Array specific power
+            <output id="array-specific-power-w-per-kg-value"></output>
+            <input id="array-specific-power-w-per-kg" type="range" />
+          </label>
+
+          <label>
+            Constellation beta mix preset
+            <select id="beta-preset"></select>
+          </label>
+        </form>
+      </aside>
+
+      <section class="panel results">
+        <h2>Results</h2>
+        <div class="kpi-grid">
+          <article class="kpi primary">
+            <p>Space Premium</p>
+            <strong id="kpi-space-premium">-</strong>
+          </article>
+          <article class="kpi">
+            <p>Fleet CAPEX</p>
+            <strong id="kpi-fleet-capex">-</strong>
+          </article>
+          <article class="kpi">
+            <p>GPU Hardware Cost</p>
+            <strong id="kpi-gpu-cost">-</strong>
+          </article>
+          <article class="kpi">
+            <p>Satellites Needed</p>
+            <strong id="kpi-satellites">-</strong>
+          </article>
+        </div>
+
+        <div class="chart-grid">
+          <article class="chart-card">
+            <h3>Fleet CAPEX Split</h3>
+            <div id="chart-cost-split" class="chart"></div>
+          </article>
+          <article class="chart-card">
+            <h3>Space Premium vs Datacenter MW</h3>
+            <div id="chart-premium-vs-mw" class="chart"></div>
+          </article>
+          <article class="chart-card chart-wide">
+            <h3>Space Premium Cost Build-Up</h3>
+            <div id="chart-space-components" class="chart"></div>
+            <p id="chart-space-components-note" class="chart-note"></p>
+            <h4 class="subchart-title">Launch Cost Drivers by Mass</h4>
+            <div id="chart-launch-breakdown" class="chart chart-secondary"></div>
+            <p id="chart-launch-breakdown-note" class="chart-note"></p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <section class="panel model-notes">
+      <h2>What This Tool Models</h2>
+      <p>
+        This simplified interactive model follows the notebook's sunlight-only fleet sizing path. It computes
+        total fleet CAPEX and isolates the <strong>Space Premium</strong> as the extra cost beyond GPU hardware
+        that an equivalent terrestrial datacenter would also buy.
+      </p>
+      <p>
+        Space Premium = Fleet CAPEX - Fleet GPU Hardware Cost.
+      </p>
+    </section>
+
+    <section class="panel reference">
+      <h2>Notebook Reference Snapshot</h2>
+      <p id="reference-meta"></p>
+      <div class="reference-grid">
+        <article>
+          <h3>Reference Inputs</h3>
+          <ul id="reference-inputs"></ul>
+        </article>
+        <article>
+          <h3>Reference Outputs</h3>
+          <ul id="reference-outputs"></ul>
+        </article>
+        <article>
+          <h3>Current Delta vs Reference</h3>
+          <ul id="reference-diff"></ul>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer-note">
+      <p>
+        Deterministic simplified model (sunlight-only). For full assumptions and derivations, see the notebook.
+      </p>
+    </footer>
+
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
