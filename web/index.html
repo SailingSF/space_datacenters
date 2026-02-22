@@ -20,50 +20,86 @@
     <main class="layout">
       <aside class="panel controls">
         <h2>Inputs</h2>
+        <div class="how-to-use">
+          <h3>How to use this explorer</h3>
+          <p>
+            Keep the default settings for a clean baseline, then move one slider at a time.
+            Watch how <strong>Space Premium</strong>, <strong>Fleet CAPEX</strong>, and
+            <strong>Satellites Needed</strong> respond.
+          </p>
+          <p>
+            Use the <span class="tooltip-inline">i</span> icons beside each parameter for plain-language definitions
+            and a good starting value.
+          </p>
+        </div>
         <form id="controls-form">
           <label>
-            Datacenter size to replace
+            <span class="label-heading">
+              Datacenter size to replace
+              <button type="button" class="tooltip-trigger" data-tooltip-key="datacenter_mw" aria-label="Datacenter size help">i</button>
+            </span>
             <output id="datacenter-mw-value"></output>
             <input id="datacenter-mw" type="range" />
           </label>
 
           <label>
-            Altitude
+            <span class="label-heading">
+              Altitude
+              <button type="button" class="tooltip-trigger" data-tooltip-key="altitude_km" aria-label="Altitude help">i</button>
+            </span>
             <output id="altitude-km-value"></output>
             <input id="altitude-km" type="range" />
           </label>
 
           <label>
-            GPU temperature
+            <span class="label-heading">
+              GPU temperature
+              <button type="button" class="tooltip-trigger" data-tooltip-key="gpu_temp_c" aria-label="GPU temperature help">i</button>
+            </span>
             <output id="gpu-temp-c-value"></output>
             <input id="gpu-temp-c" type="range" />
           </label>
 
           <label>
-            Transport temperature drop (delta T)
+            <span class="label-heading">
+              Transport temperature drop (delta T)
+              <button type="button" class="tooltip-trigger" data-tooltip-key="transport_delta_t_c" aria-label="Transport delta T help">i</button>
+            </span>
             <output id="transport-delta-t-c-value"></output>
             <input id="transport-delta-t-c" type="range" />
           </label>
 
           <label>
-            Overhead fraction
+            <span class="label-heading">
+              Overhead fraction
+              <button type="button" class="tooltip-trigger" data-tooltip-key="overhead_frac" aria-label="Overhead fraction help">i</button>
+            </span>
             <output id="overhead-frac-value"></output>
             <input id="overhead-frac" type="range" />
           </label>
 
           <label>
-            Launch cost preset
+            <span class="label-heading">
+              Launch cost preset
+              <button type="button" class="tooltip-trigger" data-tooltip-key="launch_preset" aria-label="Launch preset help">i</button>
+            </span>
             <select id="launch-preset"></select>
           </label>
 
           <label>
-            Base launch cost (to baseline altitude)
+            <span class="label-heading">
+              Base launch cost (to baseline altitude)
+              <button type="button" class="tooltip-trigger" data-tooltip-key="launch_base_cost_per_kg" aria-label="Base launch cost help">i</button>
+            </span>
             <output id="launch-base-cost-per-kg-value"></output>
             <input id="launch-base-cost-per-kg" type="range" />
           </label>
 
           <label>
-            Incremental launch cost per additional km
+            <span class="label-heading">
+              Incremental launch cost per additional km
+              <button type="button" class="tooltip-trigger" data-tooltip-key="launch_incremental_cost_per_kg_per_km" aria-label="Incremental launch cost help">i</button>
+            </span>
             <output id="launch-incremental-cost-per-kg-per-km-value"></output>
             <input id="launch-incremental-cost-per-kg-per-km" type="range" />
           </label>
@@ -75,13 +111,19 @@
           <p class="control-note sources">Sources: <span id="launch-preset-source"></span></p>
 
           <label>
-            Array specific power
+            <span class="label-heading">
+              Array specific power
+              <button type="button" class="tooltip-trigger" data-tooltip-key="array_specific_power_w_per_kg" aria-label="Array specific power help">i</button>
+            </span>
             <output id="array-specific-power-w-per-kg-value"></output>
             <input id="array-specific-power-w-per-kg" type="range" />
           </label>
 
           <label>
-            Constellation beta mix preset
+            <span class="label-heading">
+              Constellation beta mix preset
+              <button type="button" class="tooltip-trigger" data-tooltip-key="beta_preset" aria-label="Beta mix preset help">i</button>
+            </span>
             <select id="beta-preset"></select>
           </label>
         </form>

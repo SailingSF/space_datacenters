@@ -79,11 +79,113 @@ body {
   gap: 0.85rem;
 }
 
+.how-to-use {
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.7rem;
+}
+
+.how-to-use h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.how-to-use p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.tooltip-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-dark);
+}
+
 label {
   display: grid;
   gap: 0.35rem;
   font-weight: 600;
   font-size: 0.95rem;
+}
+
+.label-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tooltip-trigger {
+  appearance: none;
+  border: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-dark);
+  cursor: help;
+  position: relative;
+  line-height: 1;
+  padding: 0;
+}
+
+.tooltip-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.45rem);
+  transform: translateX(-50%);
+  width: min(300px, 72vw);
+  background: #173236;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(17, 32, 34, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 30;
+  white-space: normal;
+}
+
+.tooltip-trigger::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.15rem);
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid #173236;
+  opacity: 0;
+  z-index: 31;
+}
+
+.tooltip-trigger:hover::after,
+.tooltip-trigger:hover::before,
+.tooltip-trigger:focus-visible::after,
+.tooltip-trigger:focus-visible::before {
+  opacity: 1;
+}
+
+.tooltip-trigger:focus-visible {
+  outline: 2px solid #1d7b66;
+  outline-offset: 2px;
 }
 
 .control-note {

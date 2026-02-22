@@ -94,6 +94,57 @@ function applyRangeConfig(inputEl, valueEl, config, formatter) {
   valueEl.textContent = formatter(config.default);
 }
 
+function applyParameterTooltips(defaults) {
+  const ranges = defaults.ranges;
+  const betaDefaultKey = ranges.beta_preset.default;
+  const betaDefaultLabel = defaults.beta_mix_presets[betaDefaultKey]?.label || betaDefaultKey;
+  const activeLaunchPreset = defaults.launch_cost_presets[els.launchPreset.value];
+  const launchDefaultKey = ranges.launch_preset.default;
+  const launchDefaultLabel = defaults.launch_cost_presets[launchDefaultKey]?.label || launchDefaultKey;
+
+  const tooltips = {
+    datacenter_mw:
+      `How much terrestrial datacenter power you want space infrastructure to replace. ` +
+      `Larger values scale satellites and total cost. Good default: ${ranges.datacenter_mw.default} MW.`,
+    altitude_km:
+      `Target orbital altitude for the constellation. Higher altitude can shift launch cost and fleet sizing. ` +
+      `Good default: ${ranges.altitude_km.default} km.`,
+    gpu_temp_c:
+      `Estimated operating temperature of the GPU heat source. This affects radiator performance and mass. ` +
+      `Good default: ${ranges.gpu_temp_c.default} °C.`,
+    transport_delta_t_c:
+      `Temperature drop budget between the GPU source and the radiator surface. ` +
+      `Higher values make radiator rejection easier in this simplified model. ` +
+      `Good default: ${ranges.transport_delta_t_c.default} °C.`,
+    overhead_frac:
+      `Extra non-compute electrical load fraction (power conversion, pumping, controls, and support systems). ` +
+      `Good default: ${(ranges.overhead_frac.default * 100).toFixed(0)}%.`,
+    launch_preset:
+      `Select a launch pricing assumption package. It sets recommended base and altitude-dependent launch costs. ` +
+      `Good default: ${launchDefaultLabel}.`,
+    launch_base_cost_per_kg:
+      `Launch price per kg to the preset baseline altitude before altitude adjustments. ` +
+      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.base_cost_per_kg, { compact: false })} / kg).`,
+    launch_incremental_cost_per_kg_per_km:
+      `Additional launch price per kg for each km above baseline altitude. ` +
+      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.incremental_cost_per_kg_per_km, { compact: false })} / kg / km).`,
+    array_specific_power_w_per_kg:
+      `Solar array watts delivered per kg of array mass. Higher values reduce array mass for the same power demand. ` +
+      `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg.`,
+    beta_preset:
+      `Distribution of orbital beta angles used to estimate sunlight availability across the constellation. ` +
+      `Good default: ${betaDefaultLabel}.`
+  };
+
+  document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
+    const message = tooltips[trigger.dataset.tooltipKey];
+    if (message) {
+      trigger.dataset.tooltip = message;
+      trigger.setAttribute("title", message);
+    }
+  });
+}
+
 function updateValueLabels() {
   els.datacenterMwValue.textContent = `${Number(els.datacenterMw.value).toFixed(0)} MW`;
   els.altitudeKmValue.textContent = `${Number(els.altitudeKm.value).toFixed(0)} km`;
@@ -481,6 +532,7 @@ function wireEvents() {
     els.launchPresetSource.innerHTML = preset.source_links
       .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.label}</a>`)
       .join(" | ");
+    applyParameterTooltips(state.defaults);
     scheduleRender();
   });
 }
@@ -532,6 +584,7 @@ function configureControls(defaults) {
   els.launchPresetSource.innerHTML = initialLaunchPreset.source_links
     .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.label}</a>`)
     .join(" | ");
+  applyParameterTooltips(defaults);
 
   state.controls = [
     els.betaPreset,
