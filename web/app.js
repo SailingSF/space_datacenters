@@ -74,10 +74,40 @@ const els = {
 };
 
 const BETA_COLOR_SCALE = {
-  0: "#c6492d",
-  30: "#f08a5d",
-  60: "#3d8c86",
-  90: "#2f5d8a"
+  0: "#ec4f95",
+  30: "#c85bf0",
+  60: "#8d6be8",
+  90: "#5f65d9"
+};
+
+const THEME_COLORS = {
+  fallback: "#7f74a3",
+  chartText: "#2d1f47",
+  chartGrid: "#e8dcf3",
+  chartZero: "#ccb7e1",
+  gpu: "#6e57d8",
+  premium: "#ea4d9b",
+  line: "#b054e0",
+  waterfallIncrease: "#c75df1",
+  waterfallTotal: "#6e57d8",
+  connector: "rgba(93, 76, 128, 0.35)",
+  launchSegments: {
+    compute: "#6e57d8",
+    arrays: "#d057cb",
+    radiators: "#f28cb9",
+    bus: "#8f72dd"
+  },
+  legendBg: "rgba(255, 250, 255, 0.72)",
+  annotation: "#6a5e83",
+  starfield: "#f4e9ff",
+  earthScale: [
+    [0, "#2d2b69"],
+    [0.52, "#5a4da4"],
+    [1, "#7f69d6"]
+  ],
+  atmosphere: "#a99cf8",
+  sunlight: "#ffc77a",
+  sunlightText: "#925100"
 };
 
 async function loadJson(path) {
@@ -281,7 +311,7 @@ function renderBetaMixEditor(result = null) {
   const mixForUi = isCustom ? customMix : activeMix;
   const segmentsHtml = mixForUi
     .map(([angle, weight]) => {
-      const color = BETA_COLOR_SCALE[angle] || "#5f6f7a";
+      const color = BETA_COLOR_SCALE[angle] || THEME_COLORS.fallback;
       return `<span class="beta-mix-segment" style="width:${(weight * 100).toFixed(2)}%;background:${color}" title="${angle}° beta: ${(weight * 100).toFixed(1)}%"></span>`;
     })
     .join("");
@@ -324,7 +354,7 @@ function configureBetaEditor(defaults) {
     row.dataset.betaRow = String(angle);
     row.innerHTML = `
       <label>
-        <span class="beta-slider-label"><span class="beta-dot" style="background:${BETA_COLOR_SCALE[angle] || "#5f6f7a"}"></span>${angle}° beta share</span>
+        <span class="beta-slider-label"><span class="beta-dot" style="background:${BETA_COLOR_SCALE[angle] || THEME_COLORS.fallback}"></span>${angle}° beta share</span>
         <output>0.0%</output>
       </label>
       <input type="range" min="0" max="100" step="0.1" data-beta-angle="${angle}" />
@@ -398,7 +428,7 @@ function renderCostSplitChart(result) {
       y: [result.fleet_gpu_cost_usd],
       type: "bar",
       name: "GPU Hardware Cost",
-      marker: { color: "#2f5d8a" },
+      marker: { color: THEME_COLORS.gpu },
       customdata: [compactMoney(result.fleet_gpu_cost_usd)],
       hovertemplate: "GPU Hardware: %{customdata}<extra></extra>"
     },
@@ -407,7 +437,7 @@ function renderCostSplitChart(result) {
       y: [result.space_premium_usd],
       type: "bar",
       name: "Space Premium",
-      marker: { color: "#f26b38" },
+      marker: { color: THEME_COLORS.premium },
       customdata: [compactMoney(result.space_premium_usd)],
       hovertemplate: "Space Premium: %{customdata}<extra></extra>"
     }
@@ -416,14 +446,18 @@ function renderCostSplitChart(result) {
   const layout = {
     barmode: "stack",
     margin: { t: 72, r: 20, b: 68, l: 92 },
+    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
     yaxis: {
       title: { text: "USD", standoff: 12 },
       tickvals: yAxis.tickvals,
       ticktext: yAxis.ticktext,
       range: [0, yAxis.top],
+      gridcolor: THEME_COLORS.chartGrid,
+      zerolinecolor: THEME_COLORS.chartZero,
       automargin: true
     },
     xaxis: {
+      gridcolor: THEME_COLORS.chartGrid,
       automargin: true
     },
     legend: {
@@ -432,7 +466,7 @@ function renderCostSplitChart(result) {
       y: 1.22,
       xanchor: "left",
       yanchor: "bottom",
-      bgcolor: "rgba(255,255,255,0.65)"
+      bgcolor: THEME_COLORS.legendBg
     },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)"
@@ -468,7 +502,7 @@ function renderPremiumVsMwChart(currentInputs) {
       type: "scatter",
       mode: "lines",
       name: "Space Premium",
-      line: { color: "#115f4e", width: 3 },
+      line: { color: THEME_COLORS.line, width: 3 },
       customdata: y.map((value) => compactMoney(value)),
       hovertemplate: "MW: %{x}<br>Space Premium: %{customdata}<extra></extra>"
     },
@@ -478,7 +512,7 @@ function renderPremiumVsMwChart(currentInputs) {
       type: "scatter",
       mode: "markers",
       name: "Current Selection",
-      marker: { color: "#f26b38", size: 11 },
+      marker: { color: THEME_COLORS.premium, size: 11 },
       customdata: [compactMoney(currentResult.space_premium_usd)],
       hovertemplate: "MW: %{x}<br>Current: %{customdata}<extra></extra>"
     }
@@ -486,8 +520,10 @@ function renderPremiumVsMwChart(currentInputs) {
 
   const layout = {
     margin: { t: 56, r: 20, b: 96, l: 92 },
+    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
     xaxis: {
       title: { text: "Datacenter Size Replaced (MW)", standoff: 18 },
+      gridcolor: THEME_COLORS.chartGrid,
       automargin: true
     },
     yaxis: {
@@ -495,6 +531,8 @@ function renderPremiumVsMwChart(currentInputs) {
       tickvals: yAxis.tickvals,
       ticktext: yAxis.ticktext,
       range: [0, yAxis.top],
+      gridcolor: THEME_COLORS.chartGrid,
+      zerolinecolor: THEME_COLORS.chartZero,
       automargin: true
     },
     legend: {
@@ -503,7 +541,7 @@ function renderPremiumVsMwChart(currentInputs) {
       y: -0.28,
       xanchor: "left",
       yanchor: "top",
-      bgcolor: "rgba(255,255,255,0.65)"
+      bgcolor: THEME_COLORS.legendBg
     },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)"
@@ -535,15 +573,15 @@ function renderSpaceComponentsChart(result) {
       y: [...components.map((item) => item.value), total],
       connector: {
         line: {
-          color: "rgba(90,90,90,0.35)",
+          color: THEME_COLORS.connector,
           width: 1
         }
       },
       increasing: {
-        marker: { color: "#0f8b8d" }
+        marker: { color: THEME_COLORS.waterfallIncrease }
       },
       totals: {
-        marker: { color: "#2f5d8a" }
+        marker: { color: THEME_COLORS.waterfallTotal }
       },
       customdata: [...components.map((item) => compactMoney(item.value)), compactMoney(total)],
       hovertemplate: "%{x}: %{customdata}<extra></extra>"
@@ -552,7 +590,9 @@ function renderSpaceComponentsChart(result) {
 
   const layout = {
     margin: { t: 38, r: 20, b: 82, l: 92 },
+    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
     xaxis: {
+      gridcolor: THEME_COLORS.chartGrid,
       automargin: true
     },
     yaxis: {
@@ -560,6 +600,8 @@ function renderSpaceComponentsChart(result) {
       tickvals: yAxis.tickvals,
       ticktext: yAxis.ticktext,
       range: [0, yAxis.top],
+      gridcolor: THEME_COLORS.chartGrid,
+      zerolinecolor: THEME_COLORS.chartZero,
       automargin: true
     },
     paper_bgcolor: "rgba(0,0,0,0)",
@@ -577,10 +619,10 @@ function renderSpaceComponentsChart(result) {
 function renderLaunchBreakdownChart(result) {
   const launchByMass = result.fleet_launch_cost_breakdown_usd;
   const segments = [
-    { name: "GPUs / Compute Module", value: launchByMass.compute_usd, color: "#2f5d8a" },
-    { name: "Solar Arrays", value: launchByMass.array_usd, color: "#0f8b8d" },
-    { name: "Radiators", value: launchByMass.radiator_usd, color: "#9c6644" },
-    { name: "Bus/Structure", value: launchByMass.bus_usd, color: "#4c6a92" }
+    { name: "GPUs / Compute Module", value: launchByMass.compute_usd, color: THEME_COLORS.launchSegments.compute },
+    { name: "Solar Arrays", value: launchByMass.array_usd, color: THEME_COLORS.launchSegments.arrays },
+    { name: "Radiators", value: launchByMass.radiator_usd, color: THEME_COLORS.launchSegments.radiators },
+    { name: "Bus/Structure", value: launchByMass.bus_usd, color: THEME_COLORS.launchSegments.bus }
   ];
   const totalLaunch = segments.reduce((sum, s) => sum + s.value, 0);
   const yAxis = buildDollarAxis(totalLaunch * 1.08);
@@ -598,7 +640,9 @@ function renderLaunchBreakdownChart(result) {
   const layout = {
     barmode: "stack",
     margin: { t: 36, r: 20, b: 64, l: 92 },
+    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
     xaxis: {
+      gridcolor: THEME_COLORS.chartGrid,
       automargin: true
     },
     yaxis: {
@@ -606,6 +650,8 @@ function renderLaunchBreakdownChart(result) {
       tickvals: yAxis.tickvals,
       ticktext: yAxis.ticktext,
       range: [0, yAxis.top],
+      gridcolor: THEME_COLORS.chartGrid,
+      zerolinecolor: THEME_COLORS.chartZero,
       automargin: true
     },
     legend: {
@@ -614,7 +660,7 @@ function renderLaunchBreakdownChart(result) {
       y: 1.18,
       xanchor: "left",
       yanchor: "bottom",
-      bgcolor: "rgba(255,255,255,0.65)"
+      bgcolor: THEME_COLORS.legendBg
     },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)"
@@ -685,11 +731,7 @@ function buildEarthSurfaceTrace() {
     y,
     z,
     surfacecolor: surfaceColor,
-    colorscale: [
-      [0, "#154f7a"],
-      [0.5, "#2f7e9d"],
-      [1, "#7ab7c9"]
-    ],
+    colorscale: THEME_COLORS.earthScale,
     showscale: false,
     opacity: 0.92,
     hoverinfo: "skip"
@@ -856,8 +898,8 @@ function buildAtmosphereTrace() {
     opacity: 0.12,
     showscale: false,
     colorscale: [
-      [0, "#8ecbe0"],
-      [1, "#8ecbe0"]
+      [0, THEME_COLORS.atmosphere],
+      [1, THEME_COLORS.atmosphere]
     ],
     hoverinfo: "skip"
   };
@@ -893,7 +935,7 @@ function getStarfieldTrace() {
     z,
     marker: {
       size,
-      color: "#d7ecff",
+      color: THEME_COLORS.starfield,
       opacity: 0.55
     },
     hoverinfo: "skip",
@@ -910,11 +952,11 @@ function buildSunVectorTrace() {
     x: [1.35, 2.25],
     y: [0, 0],
     z: [0, 0],
-    line: { color: "#f3b44f", width: 8 },
-    marker: { size: [0, 7], color: "#ffd27f" },
+    line: { color: THEME_COLORS.sunlight, width: 8 },
+    marker: { size: [0, 7], color: THEME_COLORS.sunlight },
     text: ["", "Sunlight"],
     textposition: "top center",
-    textfont: { size: 11, color: "#8d5a12" },
+    textfont: { size: 11, color: THEME_COLORS.sunlightText },
     hovertemplate: "Incoming solar direction<extra></extra>",
     showlegend: false
   };
@@ -931,7 +973,7 @@ function renderConstellationFamilyCards(allocations, totalSatellites) {
   els.constellationFamilyCards.innerHTML = allocations
     .map((allocation) => {
       const pct = totalSatellites > 0 ? (100 * allocation.count) / totalSatellites : 0;
-      const color = BETA_COLOR_SCALE[allocation.betaDeg] || "#6d7c85";
+      const color = BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback;
       return `
         <article class="constellation-family-card" style="border-left-color:${color}">
           <h4>${allocation.betaDeg}° Beta Family</h4>
@@ -952,7 +994,7 @@ function renderConstellationChart(result, inputs) {
   const animationModel = [];
 
   allocations.forEach((allocation, idx) => {
-    const color = BETA_COLOR_SCALE[allocation.betaDeg] || "#6d7c85";
+    const color = BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback;
     const displayCount = displayAllocations.find((row) => row.betaDeg === allocation.betaDeg)?.displayCount || 0;
     const familyPhase = state.constellationPhase + idx * 0.72;
     const angularRateScale = 0.7 + idx * 0.17;
@@ -971,6 +1013,7 @@ function renderConstellationChart(result, inputs) {
   const axisRange = Math.max(1.2, orbitRadius * 1.12);
   const layout = {
     margin: { t: 8, r: 4, b: 4, l: 4 },
+    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
     scene: {
       xaxis: { visible: false, range: [-axisRange, axisRange] },
       yaxis: { visible: false, range: [-axisRange, axisRange] },
@@ -987,7 +1030,7 @@ function renderConstellationChart(result, inputs) {
       y: 1.04,
       xanchor: "left",
       yanchor: "bottom",
-      bgcolor: "rgba(255,255,255,0.65)"
+      bgcolor: THEME_COLORS.legendBg
     },
     paper_bgcolor: "rgba(0,0,0,0)",
     annotations: [
@@ -1000,7 +1043,7 @@ function renderConstellationChart(result, inputs) {
         xanchor: "left",
         yanchor: "bottom",
         showarrow: false,
-        font: { size: 11, color: "#506164" }
+        font: { size: 11, color: THEME_COLORS.annotation }
       }
     ]
   };
