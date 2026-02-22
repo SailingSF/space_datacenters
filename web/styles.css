@@ -203,6 +203,105 @@ label {
   color: var(--accent-dark);
 }
 
+.beta-editor {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem;
+  background: #fffaf5;
+}
+
+.beta-editor h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.beta-preset-buttons {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.beta-preset-chip {
+  border: 1px solid #c4b9a4;
+  border-radius: 999px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.77rem;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.beta-preset-chip.active {
+  border-color: #1d7b66;
+  color: #0f5a4d;
+  background: #eaf7f4;
+  font-weight: 600;
+}
+
+.beta-mix-visual {
+  margin-top: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  height: 0.9rem;
+  overflow: hidden;
+  background: #f2f0ea;
+  display: flex;
+}
+
+.beta-mix-segment {
+  display: block;
+  height: 100%;
+}
+
+.beta-custom-sliders {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.beta-slider-row {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.beta-slider-row label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.beta-slider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.beta-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.beta-reset-button {
+  margin-top: 0.55rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.beta-reset-button:hover {
+  border-color: #1d7b66;
+}
+
 output {
   font-size: 0.9rem;
   color: var(--muted);

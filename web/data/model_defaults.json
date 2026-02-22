@@ -49,14 +49,17 @@
   "beta_mix_presets": {
     "coverage_optimized": {
       "label": "Coverage-optimized (0/30/60/90 = 30/45/20/5)",
+      "description": "Balanced for general constellation coverage assumptions, with most weight at moderate beta angles.",
       "mix": [[0.0, 0.3], [30.0, 0.45], [60.0, 0.2], [90.0, 0.05]]
     },
     "leo_heavy": {
       "label": "LEO-heavy worst-season bias",
+      "description": "Stress-test case that emphasizes lower beta angles, where eclipses are generally more frequent.",
       "mix": [[0.0, 0.5], [30.0, 0.3], [60.0, 0.15], [90.0, 0.05]]
     },
     "high_beta_favorable": {
       "label": "High-beta favorable",
+      "description": "Optimistic case that shifts weight toward high-beta geometry with longer sunlight windows.",
       "mix": [[0.0, 0.1], [30.0, 0.3], [60.0, 0.4], [90.0, 0.2]]
     }
   },

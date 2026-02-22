@@ -8,12 +8,21 @@ const state = {
   defaults: null,
   reference: null,
   controls: null,
-  renderTimer: null
+  renderTimer: null,
+  betaAngles: [],
+  betaCustomShares: {}
 };
 
 const els = {
   form: document.getElementById("controls-form"),
   betaPreset: document.getElementById("beta-preset"),
+  betaPresetButtons: document.getElementById("beta-preset-buttons"),
+  betaPresetDescription: document.getElementById("beta-preset-description"),
+  betaMixVisual: document.getElementById("beta-mix-visual"),
+  betaMixSummary: document.getElementById("beta-mix-summary"),
+  betaWeightedSunlight: document.getElementById("beta-weighted-sunlight"),
+  betaCustomSliders: document.getElementById("beta-custom-sliders"),
+  betaResetButton: document.getElementById("beta-reset-button"),
   datacenterMw: document.getElementById("datacenter-mw"),
   datacenterMwValue: document.getElementById("datacenter-mw-value"),
   altitudeKm: document.getElementById("altitude-km"),
@@ -47,6 +56,13 @@ const els = {
   referenceInputs: document.getElementById("reference-inputs"),
   referenceOutputs: document.getElementById("reference-outputs"),
   referenceDiff: document.getElementById("reference-diff")
+};
+
+const BETA_COLOR_SCALE = {
+  0: "#c6492d",
+  30: "#f08a5d",
+  60: "#3d8c86",
+  90: "#2f5d8a"
 };
 
 async function loadJson(path) {
@@ -133,6 +149,7 @@ function applyParameterTooltips(defaults) {
       `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg.`,
     beta_preset:
       `Distribution of orbital beta angles used to estimate sunlight availability across the constellation. ` +
+      `Lower beta angles generally include more eclipse time, while higher beta angles tend to have longer sunlit windows. ` +
       `Good default: ${betaDefaultLabel}.`
   };
 
@@ -143,6 +160,164 @@ function applyParameterTooltips(defaults) {
       trigger.setAttribute("title", message);
     }
   });
+}
+
+function collectBetaAngles(defaults) {
+  const angleSet = new Set();
+  Object.values(defaults.beta_mix_presets).forEach((preset) => {
+    preset.mix.forEach(([betaDeg]) => {
+      angleSet.add(Number(betaDeg));
+    });
+  });
+  return Array.from(angleSet).sort((a, b) => a - b);
+}
+
+function normalizeShares(shares) {
+  const total = state.betaAngles.reduce((sum, angle) => sum + Math.max(0, Number(shares[angle] || 0)), 0);
+  const safeTotal = total > 0 ? total : 1;
+  return state.betaAngles.map((angle) => [angle, Math.max(0, Number(shares[angle] || 0)) / safeTotal]);
+}
+
+function setCustomSharesFromMix(mix) {
+  const next = {};
+  mix.forEach(([angle, weight]) => {
+    next[Number(angle)] = Number(weight) * 100;
+  });
+
+  state.betaAngles.forEach((angle) => {
+    if (typeof next[angle] !== "number") {
+      next[angle] = 0;
+    }
+  });
+
+  state.betaCustomShares = next;
+}
+
+function getPresetOrDefaultMix(presetKey) {
+  const preset = state.defaults.beta_mix_presets[presetKey];
+  if (preset) {
+    return preset.mix;
+  }
+  return state.defaults.beta_mix_presets[state.defaults.ranges.beta_preset.default].mix;
+}
+
+function rebalanceCustomShares(changedAngle, nextValuePercent) {
+  const roundedValue = Math.min(100, Math.max(0, Number(nextValuePercent)));
+  const otherAngles = state.betaAngles.filter((angle) => angle !== changedAngle);
+  const current = { ...state.betaCustomShares, [changedAngle]: roundedValue };
+  const otherTotal = otherAngles.reduce((sum, angle) => sum + Math.max(0, current[angle]), 0);
+  const remaining = Math.max(0, 100 - roundedValue);
+
+  if (otherAngles.length === 0) {
+    state.betaCustomShares = { [changedAngle]: 100 };
+    return;
+  }
+
+  if (otherTotal <= 0) {
+    const evenShare = remaining / otherAngles.length;
+    otherAngles.forEach((angle) => {
+      current[angle] = evenShare;
+    });
+  } else {
+    otherAngles.forEach((angle) => {
+      current[angle] = (Math.max(0, current[angle]) / otherTotal) * remaining;
+    });
+  }
+
+  state.betaCustomShares = current;
+}
+
+function updateBetaSliderUi() {
+  state.betaAngles.forEach((angle) => {
+    const row = els.betaCustomSliders.querySelector(`[data-beta-row="${angle}"]`);
+    if (!row) return;
+    const input = row.querySelector("input");
+    const output = row.querySelector("output");
+    const value = state.betaCustomShares[angle] ?? 0;
+    input.value = value.toFixed(1);
+    output.textContent = `${value.toFixed(1)}%`;
+  });
+}
+
+function getActiveBetaMix() {
+  const preset = state.defaults.beta_mix_presets[els.betaPreset.value];
+  if (preset) {
+    return preset.mix;
+  }
+  return normalizeShares(state.betaCustomShares);
+}
+
+function renderBetaMixEditor(result = null) {
+  const isCustom = els.betaPreset.value === "__custom__";
+  const activeMix = getActiveBetaMix();
+  const customMix = normalizeShares(state.betaCustomShares);
+  const preset = state.defaults.beta_mix_presets[els.betaPreset.value];
+
+  els.betaPresetDescription.textContent = preset
+    ? `${preset.description || "Preset beta-angle distribution for constellation sunlight modeling."}`
+    : "Custom mix mode: adjust shares below; sliders always sum to 100%.";
+
+  els.betaPresetButtons.querySelectorAll("button").forEach((button) => {
+    const isActive = !isCustom && button.dataset.presetKey === els.betaPreset.value;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  const mixForUi = isCustom ? customMix : activeMix;
+  const segmentsHtml = mixForUi
+    .map(([angle, weight]) => {
+      const color = BETA_COLOR_SCALE[angle] || "#5f6f7a";
+      return `<span class="beta-mix-segment" style="width:${(weight * 100).toFixed(2)}%;background:${color}" title="${angle}° beta: ${(weight * 100).toFixed(1)}%"></span>`;
+    })
+    .join("");
+  els.betaMixVisual.innerHTML = segmentsHtml;
+
+  els.betaMixSummary.textContent =
+    mixForUi.map(([angle, weight]) => `${angle}°: ${(weight * 100).toFixed(1)}%`).join(" | ");
+
+  if (result) {
+    els.betaWeightedSunlight.textContent = `Current weighted sunlight fraction from this mix: ${result.sunlight_fraction_weighted.toFixed(4)}.`;
+  }
+
+  updateBetaSliderUi();
+}
+
+function configureBetaEditor(defaults) {
+  state.betaAngles = collectBetaAngles(defaults);
+  setCustomSharesFromMix(getPresetOrDefaultMix(defaults.ranges.beta_preset.default));
+
+  els.betaPresetButtons.innerHTML = "";
+  Object.entries(defaults.beta_mix_presets).forEach(([key, preset]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "beta-preset-chip";
+    button.dataset.presetKey = key;
+    button.textContent = preset.label;
+    button.addEventListener("click", () => {
+      els.betaPreset.value = key;
+      setCustomSharesFromMix(preset.mix);
+      renderBetaMixEditor();
+      scheduleRender();
+    });
+    els.betaPresetButtons.appendChild(button);
+  });
+
+  els.betaCustomSliders.innerHTML = "";
+  state.betaAngles.forEach((angle) => {
+    const row = document.createElement("div");
+    row.className = "beta-slider-row";
+    row.dataset.betaRow = String(angle);
+    row.innerHTML = `
+      <label>
+        <span class="beta-slider-label"><span class="beta-dot" style="background:${BETA_COLOR_SCALE[angle] || "#5f6f7a"}"></span>${angle}° beta share</span>
+        <output>0.0%</output>
+      </label>
+      <input type="range" min="0" max="100" step="0.1" data-beta-angle="${angle}" />
+    `;
+    els.betaCustomSliders.appendChild(row);
+  });
+
+  renderBetaMixEditor();
 }
 
 function updateValueLabels() {
@@ -161,7 +336,7 @@ function updateValueLabels() {
 function getCurrentInputPayload() {
   const defaults = state.defaults;
   const selectedPreset = els.betaPreset.value;
-  const preset = defaults.beta_mix_presets[selectedPreset];
+  const activeBetaMix = getActiveBetaMix();
   const launchPreset = defaults.launch_cost_presets[els.launchPreset.value];
 
   return {
@@ -174,7 +349,7 @@ function getCurrentInputPayload() {
     launch_incremental_cost_per_kg_per_km: Number(els.launchIncrementalCost.value),
     array_specific_power_w_per_kg: Number(els.arraySpecificPower.value),
     beta_preset: selectedPreset,
-    beta_mix: preset.mix,
+    beta_mix: activeBetaMix,
     launch_preset: els.launchPreset.value,
     launch_model: {
       base_alt_km: Number(launchPreset.base_alt_km),
@@ -499,6 +674,7 @@ function renderAll() {
   constants.ARRAY_SPECIFIC_POWER_W_PER_KG = inputs.array_specific_power_w_per_kg;
 
   const result = computeScenario(inputs, constants);
+  renderBetaMixEditor(result);
   renderKpis(result);
   renderCostSplitChart(result);
   renderPremiumVsMwChart(inputs);
@@ -535,6 +711,35 @@ function wireEvents() {
     applyParameterTooltips(state.defaults);
     scheduleRender();
   });
+
+  els.betaPreset.addEventListener("change", () => {
+    if (els.betaPreset.value !== "__custom__") {
+      setCustomSharesFromMix(getPresetOrDefaultMix(els.betaPreset.value));
+    }
+    renderBetaMixEditor();
+    scheduleRender();
+  });
+
+  els.betaCustomSliders.addEventListener("input", (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const angle = Number(event.target.dataset.betaAngle);
+    if (!Number.isFinite(angle)) return;
+    rebalanceCustomShares(angle, Number(event.target.value));
+    els.betaPreset.value = "__custom__";
+    renderBetaMixEditor();
+    scheduleRender();
+  });
+
+  els.betaResetButton.addEventListener("click", () => {
+    const presetKey = els.betaPreset.value === "__custom__" ? state.defaults.ranges.beta_preset.default : els.betaPreset.value;
+    const mix = getPresetOrDefaultMix(presetKey);
+    setCustomSharesFromMix(mix);
+    if (els.betaPreset.value === "__custom__") {
+      els.betaPreset.value = presetKey;
+    }
+    renderBetaMixEditor();
+    scheduleRender();
+  });
 }
 
 function configureControls(defaults) {
@@ -544,6 +749,10 @@ function configureControls(defaults) {
     option.textContent = preset.label;
     els.betaPreset.appendChild(option);
   });
+  const customOption = document.createElement("option");
+  customOption.value = "__custom__";
+  customOption.textContent = "Custom visual mix (editable below)";
+  els.betaPreset.appendChild(customOption);
   els.betaPreset.value = defaults.ranges.beta_preset.default;
 
   Object.entries(defaults.launch_cost_presets).forEach(([key, preset]) => {
@@ -585,6 +794,7 @@ function configureControls(defaults) {
     .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.label}</a>`)
     .join(" | ");
   applyParameterTooltips(defaults);
+  configureBetaEditor(defaults);
 
   state.controls = [
     els.betaPreset,
