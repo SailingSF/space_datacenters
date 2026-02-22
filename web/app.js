@@ -10,8 +10,17 @@ const state = {
   controls: null,
   renderTimer: null,
   betaAngles: [],
-  betaCustomShares: {}
+  betaCustomShares: {},
+  constellationPhase: 0,
+  constellationSpeedRps: 0.35,
+  constellationAnimating: true,
+  constellationFrameHandle: null,
+  constellationLastTickMs: null,
+  constellationStarfield: null,
+  constellationAnimationModel: null
 };
+
+const EARTH_RADIUS_KM = 6371;
 
 const els = {
   form: document.getElementById("controls-form"),
@@ -52,6 +61,12 @@ const els = {
   chartSpaceComponentsNote: document.getElementById("chart-space-components-note"),
   chartLaunchBreakdown: document.getElementById("chart-launch-breakdown"),
   chartLaunchBreakdownNote: document.getElementById("chart-launch-breakdown-note"),
+  chartConstellation: document.getElementById("chart-constellation"),
+  chartConstellationNote: document.getElementById("chart-constellation-note"),
+  constellationPlayToggle: document.getElementById("constellation-play-toggle"),
+  constellationSpeed: document.getElementById("constellation-speed"),
+  constellationSpeedValue: document.getElementById("constellation-speed-value"),
+  constellationFamilyCards: document.getElementById("constellation-family-cards"),
   referenceMeta: document.getElementById("reference-meta"),
   referenceInputs: document.getElementById("reference-inputs"),
   referenceOutputs: document.getElementById("reference-outputs"),
@@ -615,6 +630,398 @@ function renderLaunchBreakdownChart(result) {
     `Arrays contribute ${arraysMassShare.toFixed(1)}% of launched mass in this scenario.`;
 }
 
+function allocateSatellitesByMix(totalSatellites, mix) {
+  const desired = mix.map(([betaDeg, weight]) => ({
+    betaDeg,
+    desired: totalSatellites * weight
+  }));
+  const base = desired.map((row) => ({
+    betaDeg: row.betaDeg,
+    count: Math.floor(row.desired),
+    frac: row.desired - Math.floor(row.desired)
+  }));
+  let remaining = totalSatellites - base.reduce((sum, row) => sum + row.count, 0);
+  base
+    .slice()
+    .sort((a, b) => b.frac - a.frac)
+    .forEach((row) => {
+      if (remaining <= 0) return;
+      const target = base.find((entry) => entry.betaDeg === row.betaDeg);
+      target.count += 1;
+      remaining -= 1;
+    });
+  return base.map(({ betaDeg, count }) => ({ betaDeg, count }));
+}
+
+function buildEarthSurfaceTrace() {
+  const latSteps = 18;
+  const lonSteps = 36;
+  const x = [];
+  const y = [];
+  const z = [];
+  const surfaceColor = [];
+
+  for (let i = 0; i <= latSteps; i += 1) {
+    const lat = (-Math.PI / 2) + (i * Math.PI / latSteps);
+    x[i] = [];
+    y[i] = [];
+    z[i] = [];
+    surfaceColor[i] = [];
+    for (let j = 0; j <= lonSteps; j += 1) {
+      const lon = (j * 2 * Math.PI) / lonSteps;
+      const xVal = Math.cos(lat) * Math.cos(lon);
+      const yVal = Math.cos(lat) * Math.sin(lon);
+      const zVal = Math.sin(lat);
+      x[i].push(xVal);
+      y[i].push(yVal);
+      z[i].push(zVal);
+      surfaceColor[i].push((zVal + 1) / 2);
+    }
+  }
+
+  return {
+    type: "surface",
+    x,
+    y,
+    z,
+    surfacecolor: surfaceColor,
+    colorscale: [
+      [0, "#154f7a"],
+      [0.5, "#2f7e9d"],
+      [1, "#7ab7c9"]
+    ],
+    showscale: false,
+    opacity: 0.92,
+    hoverinfo: "skip"
+  };
+}
+
+function buildOrbitFamilyTrace(radiusEarthUnits, betaDeg, orbitColor) {
+  const steps = 240;
+  const x = [];
+  const y = [];
+  const z = [];
+  const tilt = (betaDeg * Math.PI) / 180;
+
+  for (let i = 0; i <= steps; i += 1) {
+    const theta = (i * 2 * Math.PI) / steps;
+    const xr = radiusEarthUnits * Math.cos(theta);
+    const yr = radiusEarthUnits * Math.sin(theta);
+    x.push(xr);
+    y.push(yr * Math.cos(tilt));
+    z.push(yr * Math.sin(tilt));
+  }
+
+  return {
+    type: "scatter3d",
+    mode: "lines",
+    x,
+    y,
+    z,
+    line: { color: orbitColor, width: 3 },
+    hovertemplate: `${betaDeg}° orbit family<extra></extra>`,
+    showlegend: true,
+    name: `${betaDeg}° orbit`
+  };
+}
+
+function sampleSatelliteCount(totalSatellites) {
+  if (totalSatellites <= 180) return totalSatellites;
+  return Math.min(280, Math.max(140, Math.round(Math.sqrt(totalSatellites) * 7.5)));
+}
+
+function allocateDisplaySamplesByFamily(allocations, displayTotal) {
+  const totalSatellites = allocations.reduce((sum, row) => sum + row.count, 0);
+  if (totalSatellites <= 0 || displayTotal <= 0) {
+    return allocations.map((row) => ({ betaDeg: row.betaDeg, displayCount: 0 }));
+  }
+
+  const weighted = allocations.map((row) => ({
+    betaDeg: row.betaDeg,
+    desired: (row.count / totalSatellites) * displayTotal
+  }));
+  const base = weighted.map((row) => ({
+    betaDeg: row.betaDeg,
+    displayCount: Math.floor(row.desired),
+    frac: row.desired - Math.floor(row.desired)
+  }));
+  let remaining = displayTotal - base.reduce((sum, row) => sum + row.displayCount, 0);
+  base
+    .slice()
+    .sort((a, b) => b.frac - a.frac)
+    .forEach((row) => {
+      if (remaining <= 0) return;
+      const target = base.find((entry) => entry.betaDeg === row.betaDeg);
+      target.displayCount += 1;
+      remaining -= 1;
+    });
+
+  return base.map(({ betaDeg, displayCount }) => ({ betaDeg, displayCount }));
+}
+
+function buildOrbitPositions(radiusEarthUnits, betaDeg, pointCount, phaseOffset = 0) {
+  const x = [];
+  const y = [];
+  const z = [];
+  const tilt = (betaDeg * Math.PI) / 180;
+  for (let i = 0; i < pointCount; i += 1) {
+    const theta = (i * 2 * Math.PI) / Math.max(pointCount, 1) + phaseOffset;
+    const xr = radiusEarthUnits * Math.cos(theta);
+    const yr = radiusEarthUnits * Math.sin(theta);
+    x.push(xr);
+    y.push(yr * Math.cos(tilt));
+    z.push(yr * Math.sin(tilt));
+  }
+  return { x, y, z };
+}
+
+function buildSatelliteDensityTrace(radiusEarthUnits, betaDeg, fullCount, displayCount, orbitColor, phaseOffset) {
+  const points = buildOrbitPositions(radiusEarthUnits, betaDeg, displayCount, phaseOffset);
+  const size = fullCount > 300 ? 2.4 : 2.9;
+
+  return {
+    type: "scatter3d",
+    mode: "markers",
+    ...points,
+    marker: {
+      color: orbitColor,
+      size,
+      opacity: 0.52
+    },
+    hovertemplate: `${betaDeg}° beta family<br>Total satellites: ${new Intl.NumberFormat("en-US").format(fullCount)}<extra></extra>`,
+    showlegend: false
+  };
+}
+
+function buildMotionPacketPoints(radiusEarthUnits, betaDeg, phase, packetSize = 6, spacing = 0.18) {
+  const x = [];
+  const y = [];
+  const z = [];
+  const tilt = (betaDeg * Math.PI) / 180;
+  for (let k = 0; k < packetSize; k += 1) {
+    const theta = phase - k * spacing;
+    const xr = radiusEarthUnits * Math.cos(theta);
+    const yr = radiusEarthUnits * Math.sin(theta);
+    x.push(xr);
+    y.push(yr * Math.cos(tilt));
+    z.push(yr * Math.sin(tilt));
+  }
+  return { x, y, z };
+}
+
+function buildMotionPacketTrace(radiusEarthUnits, betaDeg, orbitColor, phase) {
+  const packetSize = 6;
+  const points = buildMotionPacketPoints(radiusEarthUnits, betaDeg, phase, packetSize);
+  const markerSize = [7.2, 6.3, 5.5, 4.8, 4.1, 3.5];
+  const markerOpacity = [0.96, 0.8, 0.64, 0.5, 0.4, 0.28];
+
+  return {
+    type: "scatter3d",
+    mode: "markers",
+    ...points,
+    marker: {
+      color: orbitColor,
+      size: markerSize,
+      opacity: markerOpacity
+    },
+    hovertemplate: `${betaDeg}° orbit motion packet<extra></extra>`,
+    showlegend: false
+  };
+}
+
+function buildAtmosphereTrace() {
+  const latSteps = 16;
+  const lonSteps = 32;
+  const radius = 1.05;
+  const x = [];
+  const y = [];
+  const z = [];
+  for (let i = 0; i <= latSteps; i += 1) {
+    const lat = (-Math.PI / 2) + (i * Math.PI / latSteps);
+    x[i] = [];
+    y[i] = [];
+    z[i] = [];
+    for (let j = 0; j <= lonSteps; j += 1) {
+      const lon = (j * 2 * Math.PI) / lonSteps;
+      x[i].push(radius * Math.cos(lat) * Math.cos(lon));
+      y[i].push(radius * Math.cos(lat) * Math.sin(lon));
+      z[i].push(radius * Math.sin(lat));
+    }
+  }
+  return {
+    type: "surface",
+    x,
+    y,
+    z,
+    opacity: 0.12,
+    showscale: false,
+    colorscale: [
+      [0, "#8ecbe0"],
+      [1, "#8ecbe0"]
+    ],
+    hoverinfo: "skip"
+  };
+}
+
+function getStarfieldTrace() {
+  if (state.constellationStarfield) {
+    return state.constellationStarfield;
+  }
+
+  const count = 160;
+  const radius = 4.3;
+  const x = [];
+  const y = [];
+  const z = [];
+  const size = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const theta = (i * 137.507764) * Math.PI / 180;
+    const v = -1 + (2 * (i + 0.5)) / count;
+    const phi = Math.acos(v);
+    x.push(radius * Math.sin(phi) * Math.cos(theta));
+    y.push(radius * Math.sin(phi) * Math.sin(theta));
+    z.push(radius * Math.cos(phi));
+    size.push((i % 3) + 1.4);
+  }
+
+  state.constellationStarfield = {
+    type: "scatter3d",
+    mode: "markers",
+    x,
+    y,
+    z,
+    marker: {
+      size,
+      color: "#d7ecff",
+      opacity: 0.55
+    },
+    hoverinfo: "skip",
+    showlegend: false
+  };
+
+  return state.constellationStarfield;
+}
+
+function buildSunVectorTrace() {
+  return {
+    type: "scatter3d",
+    mode: "lines+markers+text",
+    x: [1.35, 2.25],
+    y: [0, 0],
+    z: [0, 0],
+    line: { color: "#f3b44f", width: 8 },
+    marker: { size: [0, 7], color: "#ffd27f" },
+    text: ["", "Sunlight"],
+    textposition: "top center",
+    textfont: { size: 11, color: "#8d5a12" },
+    hovertemplate: "Incoming solar direction<extra></extra>",
+    showlegend: false
+  };
+}
+
+function sunlightTendencyLabel(betaDeg) {
+  if (betaDeg <= 15) return "Lower beta: more eclipse exposure in this simplified framing.";
+  if (betaDeg <= 45) return "Mid beta: mixed sun/eclipse behavior.";
+  if (betaDeg <= 75) return "High beta: longer sunlit windows are more common.";
+  return "Near-polar beta: often most sunlight-favorable in this model.";
+}
+
+function renderConstellationFamilyCards(allocations, totalSatellites) {
+  els.constellationFamilyCards.innerHTML = allocations
+    .map((allocation) => {
+      const pct = totalSatellites > 0 ? (100 * allocation.count) / totalSatellites : 0;
+      const color = BETA_COLOR_SCALE[allocation.betaDeg] || "#6d7c85";
+      return `
+        <article class="constellation-family-card" style="border-left-color:${color}">
+          <h4>${allocation.betaDeg}° Beta Family</h4>
+          <p><strong>${new Intl.NumberFormat("en-US").format(allocation.count)}</strong> satellites (${pct.toFixed(1)}% of fleet).</p>
+          <p>${sunlightTendencyLabel(allocation.betaDeg)}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderConstellationChart(result, inputs) {
+  const orbitRadius = 1 + (inputs.altitude_km / EARTH_RADIUS_KM);
+  const allocations = allocateSatellitesByMix(result.satellites_needed, result.beta_mix_used);
+  const displayTotal = sampleSatelliteCount(result.satellites_needed);
+  const displayAllocations = allocateDisplaySamplesByFamily(allocations, displayTotal);
+  const traces = [getStarfieldTrace(), buildAtmosphereTrace(), buildEarthSurfaceTrace(), buildSunVectorTrace()];
+  const animationModel = [];
+
+  allocations.forEach((allocation, idx) => {
+    const color = BETA_COLOR_SCALE[allocation.betaDeg] || "#6d7c85";
+    const displayCount = displayAllocations.find((row) => row.betaDeg === allocation.betaDeg)?.displayCount || 0;
+    const familyPhase = state.constellationPhase + idx * 0.72;
+    const angularRateScale = 0.7 + idx * 0.17;
+    traces.push(buildOrbitFamilyTrace(orbitRadius, allocation.betaDeg, color));
+    traces.push(buildSatelliteDensityTrace(orbitRadius, allocation.betaDeg, allocation.count, displayCount, color, familyPhase));
+    traces.push(buildMotionPacketTrace(orbitRadius, allocation.betaDeg, color, familyPhase));
+    animationModel.push({
+      traceIndex: traces.length - 1,
+      betaDeg: allocation.betaDeg,
+      orbitRadius,
+      basePhase: idx * 0.72,
+      angularRateScale
+    });
+  });
+
+  const axisRange = Math.max(1.2, orbitRadius * 1.12);
+  const layout = {
+    margin: { t: 8, r: 4, b: 4, l: 4 },
+    scene: {
+      xaxis: { visible: false, range: [-axisRange, axisRange] },
+      yaxis: { visible: false, range: [-axisRange, axisRange] },
+      zaxis: { visible: false, range: [-axisRange, axisRange] },
+      aspectmode: "cube",
+      camera: {
+        eye: { x: 1.45, y: 1.2, z: 0.86 }
+      },
+      bgcolor: "rgba(0,0,0,0)"
+    },
+    legend: {
+      orientation: "h",
+      x: 0.02,
+      y: 1.04,
+      xanchor: "left",
+      yanchor: "bottom",
+      bgcolor: "rgba(255,255,255,0.65)"
+    },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    annotations: [
+      {
+        text: "Earth-centered view",
+        x: 0,
+        y: 0,
+        xref: "paper",
+        yref: "paper",
+        xanchor: "left",
+        yanchor: "bottom",
+        showarrow: false,
+        font: { size: 11, color: "#506164" }
+      }
+    ]
+  };
+
+  Plotly.react(els.chartConstellation, traces, layout, {
+    responsive: true,
+    displayModeBar: false
+  });
+  state.constellationAnimationModel = animationModel;
+
+  const mixSummary = allocations
+    .map((row) => `${row.betaDeg}°: ${new Intl.NumberFormat("en-US").format(row.count)}`)
+    .join(" | ");
+  els.chartConstellationNote.textContent =
+    `Showing full constellation: ${new Intl.NumberFormat("en-US").format(result.satellites_needed)} satellites at ${inputs.altitude_km.toFixed(0)} km. ` +
+    `Orbit-family allocation by beta mix: ${mixSummary}. Displaying ${new Intl.NumberFormat("en-US").format(displayTotal)} sampled markers plus motion packets for performance. ` +
+    `This is a beta-bin representation for visual intuition, not a full orbital mechanics propagation.`;
+
+  renderConstellationFamilyCards(allocations, result.satellites_needed);
+}
+
 function renderReferencePanel(currentResult, inputs) {
   const ref = state.reference;
   els.referenceMeta.textContent = `${ref.source_notebook.path} | snapshot: ${ref.source_notebook.snapshot_utc}`;
@@ -680,6 +1087,7 @@ function renderAll() {
   renderPremiumVsMwChart(inputs);
   renderSpaceComponentsChart(result);
   renderLaunchBreakdownChart(result);
+  renderConstellationChart(result, inputs);
   renderReferencePanel(result, inputs);
 
   window.spaceDatacenterDebug = {
@@ -688,6 +1096,74 @@ function renderAll() {
     result,
     checkIdentity: Math.abs(result.space_premium_usd - (result.fleet_capex_usd - result.fleet_gpu_cost_usd)) < 1e-6
   };
+}
+
+function updateConstellationSpeedLabel() {
+  els.constellationSpeedValue.textContent = `${state.constellationSpeedRps.toFixed(2)} rev/s`;
+}
+
+function updateConstellationPlayButton() {
+  els.constellationPlayToggle.textContent = state.constellationAnimating ? "Pause Motion" : "Play Motion";
+}
+
+function restyleConstellationMotionPackets() {
+  const model = state.constellationAnimationModel;
+  if (!Array.isArray(model) || model.length === 0) return;
+
+  const xUpdates = [];
+  const yUpdates = [];
+  const zUpdates = [];
+  const traceIndices = [];
+
+  model.forEach((entry) => {
+    const phase = state.constellationPhase * entry.angularRateScale + entry.basePhase;
+    const points = buildMotionPacketPoints(entry.orbitRadius, entry.betaDeg, phase, 6, 0.18);
+    xUpdates.push(points.x);
+    yUpdates.push(points.y);
+    zUpdates.push(points.z);
+    traceIndices.push(entry.traceIndex);
+  });
+
+  Plotly.restyle(
+    els.chartConstellation,
+    {
+      x: xUpdates,
+      y: yUpdates,
+      z: zUpdates
+    },
+    traceIndices
+  );
+}
+
+function tickConstellationAnimation() {
+  const now = performance.now();
+  if (state.constellationLastTickMs == null) {
+    state.constellationLastTickMs = now;
+    return;
+  }
+
+  const dt = (now - state.constellationLastTickMs) / 1000;
+  if (dt < 1 / 24) {
+    return;
+  }
+  state.constellationLastTickMs = now;
+
+  if (!state.constellationAnimating) return;
+  if (!state.constellationAnimationModel) return;
+
+  state.constellationPhase += dt * state.constellationSpeedRps * 2 * Math.PI;
+  restyleConstellationMotionPackets();
+}
+
+function animationLoop() {
+  tickConstellationAnimation();
+  state.constellationFrameHandle = requestAnimationFrame(animationLoop);
+}
+
+function startConstellationAnimation() {
+  if (state.constellationFrameHandle != null) return;
+  state.constellationLastTickMs = null;
+  state.constellationFrameHandle = requestAnimationFrame(animationLoop);
 }
 
 function scheduleRender() {
@@ -739,6 +1215,17 @@ function wireEvents() {
     }
     renderBetaMixEditor();
     scheduleRender();
+  });
+
+  els.constellationPlayToggle.addEventListener("click", () => {
+    state.constellationAnimating = !state.constellationAnimating;
+    state.constellationLastTickMs = null;
+    updateConstellationPlayButton();
+  });
+
+  els.constellationSpeed.addEventListener("input", () => {
+    state.constellationSpeedRps = Number(els.constellationSpeed.value);
+    updateConstellationSpeedLabel();
   });
 }
 
@@ -795,6 +1282,9 @@ function configureControls(defaults) {
     .join(" | ");
   applyParameterTooltips(defaults);
   configureBetaEditor(defaults);
+  els.constellationSpeed.value = state.constellationSpeedRps;
+  updateConstellationSpeedLabel();
+  updateConstellationPlayButton();
 
   state.controls = [
     els.betaPreset,
@@ -820,6 +1310,7 @@ async function init() {
   configureControls(defaults);
   wireEvents();
   renderAll();
+  startConstellationAnimation();
 }
 
 init().catch((err) => {

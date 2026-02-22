@@ -399,6 +399,70 @@ select {
   min-height: 300px;
 }
 
+.constellation-chart {
+  min-height: 460px;
+}
+
+.constellation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: end;
+  margin: 0.15rem 0 0.45rem;
+}
+
+.constellation-play-toggle {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.constellation-play-toggle:hover {
+  border-color: #1d7b66;
+}
+
+.constellation-speed-control {
+  margin: 0;
+  min-width: min(330px, 100%);
+  flex: 1;
+}
+
+.constellation-speed-control output {
+  font-size: 0.8rem;
+}
+
+.constellation-family-cards {
+  margin-top: 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.constellation-family-card {
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: #fffcf6;
+}
+
+.constellation-family-card h4 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.constellation-family-card p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .reference-grid {
   display: grid;
   grid-template-columns: 1fr;
