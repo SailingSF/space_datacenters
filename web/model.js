@@ -2,6 +2,7 @@ const SIGMA = 5.670374419e-8;
 const MU_EARTH = 3.986004418e14;
 const R_EARTH = 6371000.0;
 const SOLAR_CONSTANT = 1361.0;
+const G0 = 9.80665;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -18,15 +19,22 @@ export function validateInputs(inputs, ranges) {
       ranges.launch_base_cost_per_kg.min,
       ranges.launch_base_cost_per_kg.max
     ),
-    launch_incremental_cost_per_kg_per_km: clamp(
-      Number(inputs.launch_incremental_cost_per_kg_per_km),
-      ranges.launch_incremental_cost_per_kg_per_km.min,
-      ranges.launch_incremental_cost_per_kg_per_km.max
+    isp_transfer_s: clamp(Number(inputs.isp_transfer_s), ranges.isp_transfer_s.min, ranges.isp_transfer_s.max),
+    propulsion_struct_frac: clamp(
+      Number(inputs.propulsion_struct_frac),
+      ranges.propulsion_struct_frac.min,
+      ranges.propulsion_struct_frac.max
     ),
     array_specific_power_w_per_kg: clamp(
       Number(inputs.array_specific_power_w_per_kg),
       ranges.array_specific_power_w_per_kg.min,
       ranges.array_specific_power_w_per_kg.max
+    ),
+    epsilon: clamp(Number(inputs.epsilon), ranges.epsilon.min, ranges.epsilon.max),
+    radiator_areal_density_kg_per_m2: clamp(
+      Number(inputs.radiator_areal_density_kg_per_m2),
+      ranges.radiator_areal_density_kg_per_m2.min,
+      ranges.radiator_areal_density_kg_per_m2.max
     ),
     overhead_frac: clamp(Number(inputs.overhead_frac), ranges.overhead_frac.min, ranges.overhead_frac.max),
     beta_preset: String(inputs.beta_preset),
@@ -39,10 +47,11 @@ export function validateInputs(inputs, ranges) {
         ranges.launch_base_cost_per_kg.min,
         ranges.launch_base_cost_per_kg.max
       ),
-      incremental_cost_per_kg_per_km: clamp(
-        Number(inputs.launch_model.incremental_cost_per_kg_per_km),
-        ranges.launch_incremental_cost_per_kg_per_km.min,
-        ranges.launch_incremental_cost_per_kg_per_km.max
+      isp_s: clamp(Number(inputs.launch_model.isp_s), ranges.isp_transfer_s.min, ranges.isp_transfer_s.max),
+      propulsion_struct_frac: clamp(
+        Number(inputs.launch_model.propulsion_struct_frac),
+        ranges.propulsion_struct_frac.min,
+        ranges.propulsion_struct_frac.max
       )
     }
   };
@@ -194,12 +203,49 @@ function totalMassWithBus(nonBusMassKg, busFraction) {
   return nonBusMassKg / Math.max(1.0 - busFraction, 1e-9);
 }
 
-function effectiveCostPerKgToAltitudeLinear(altKm, launchModel) {
-  const deltaKm = Math.max(0, altKm - launchModel.base_alt_km);
-  return (
-    launchModel.base_cost_per_kg +
-    launchModel.incremental_cost_per_kg_per_km * deltaKm
-  );
+function hohmannDeltaVmS(alt1Km, alt2Km) {
+  const r1 = R_EARTH + 1000.0 * alt1Km;
+  const r2 = R_EARTH + 1000.0 * alt2Km;
+  const v1 = Math.sqrt(MU_EARTH / r1);
+  const v2 = Math.sqrt(MU_EARTH / r2);
+  const aTransfer = 0.5 * (r1 + r2);
+  const vTransfer1 = Math.sqrt(MU_EARTH * (2 / r1 - 1 / aTransfer));
+  const vTransfer2 = Math.sqrt(MU_EARTH * (2 / r2 - 1 / aTransfer));
+  const dv1 = Math.abs(vTransfer1 - v1);
+  const dv2 = Math.abs(v2 - vTransfer2);
+  return dv1 + dv2;
+}
+
+function effectiveCostPerKgToAltitude(altKm, launchModel) {
+  if (altKm <= launchModel.base_alt_km) {
+    return {
+      cost_per_kg: launchModel.base_cost_per_kg,
+      mass_multiplier: 1.0,
+      delta_v_m_s: 0.0
+    };
+  }
+
+  const deltaV = hohmannDeltaVmS(launchModel.base_alt_km, altKm);
+  const rocketMassRatio = Math.exp(deltaV / (G0 * Math.max(launchModel.isp_s, 1e-9)));
+  let massMultiplier = rocketMassRatio;
+
+  if (launchModel.propulsion_struct_frac > 0) {
+    const denom = 1.0 - launchModel.propulsion_struct_frac * (rocketMassRatio - 1.0);
+    if (denom <= 0) {
+      return {
+        cost_per_kg: Number.POSITIVE_INFINITY,
+        mass_multiplier: Number.POSITIVE_INFINITY,
+        delta_v_m_s: deltaV
+      };
+    }
+    massMultiplier = rocketMassRatio / denom;
+  }
+
+  return {
+    cost_per_kg: launchModel.base_cost_per_kg * massMultiplier,
+    mass_multiplier: massMultiplier,
+    delta_v_m_s: deltaV
+  };
 }
 
 function satelliteMassBreakdownSunOnly(altKm, betaDeg, constants, runtime) {
@@ -208,7 +254,7 @@ function satelliteMassBreakdownSunOnly(altKm, betaDeg, constants, runtime) {
   const tRadC = radiatorTempC(runtime.gpu_temp_c, runtime.transport_delta_t_c);
 
   const rad = radiatorAreaM2WithBackload(pLoadW, tRadC, altKm, betaDeg, constants);
-  const mRadiatorKg = rad.area_m2 * constants.RADIATOR_AREAL_DENSITY;
+  const mRadiatorKg = rad.area_m2 * runtime.radiator_areal_density_kg_per_m2;
 
   const pArrayPeakW = pLoadW;
   const mArrayKg = pArrayPeakW / runtime.array_specific_power_w_per_kg;
@@ -242,7 +288,8 @@ function satelliteCapexUsdSunOnly(breakdown, constants, runtime) {
   const arrayCost = breakdown.p_array_peak_w * constants.ARRAY_COST_PER_W;
   const radiatorCost = breakdown.a_radiator_m2 * constants.RADIATOR_COST_PER_M2;
   const busCost = constants.BUS_COST_FIXED;
-  const launchCostPerKg = effectiveCostPerKgToAltitudeLinear(breakdown.alt_km, runtime.launch_model);
+  const launch = effectiveCostPerKgToAltitude(breakdown.alt_km, runtime.launch_model);
+  const launchCostPerKg = launch.cost_per_kg;
   const launchCost = breakdown.m_total_kg * launchCostPerKg;
 
   return {
@@ -254,7 +301,8 @@ function satelliteCapexUsdSunOnly(breakdown, constants, runtime) {
       battery_usd: 0.0,
       bus_usd: busCost,
       launch_usd: launchCost
-    }
+    },
+    launch
   };
 }
 
@@ -276,7 +324,10 @@ export function computeFleetFromMix(inputs, constants) {
       m_battery_kg: breakdown.m_battery_kg,
       m_bus_kg: breakdown.m_bus_kg,
       sat_capex_usd: capex.total_capex_usd,
-      sat_component_costs: capex.components
+      sat_component_costs: capex.components,
+      launch_cost_per_kg_at_altitude: capex.launch.cost_per_kg,
+      launch_mass_multiplier: capex.launch.mass_multiplier,
+      transfer_delta_v_m_s: capex.launch.delta_v_m_s
     };
   });
 
@@ -297,6 +348,9 @@ export function computeFleetFromMix(inputs, constants) {
       acc.component_costs.battery_usd += row.weight * row.sat_component_costs.battery_usd;
       acc.component_costs.bus_usd += row.weight * row.sat_component_costs.bus_usd;
       acc.component_costs.launch_usd += row.weight * row.sat_component_costs.launch_usd;
+      acc.launch_cost_per_kg_at_altitude += row.weight * row.launch_cost_per_kg_at_altitude;
+      acc.launch_mass_multiplier += row.weight * row.launch_mass_multiplier;
+      acc.transfer_delta_v_m_s += row.weight * row.transfer_delta_v_m_s;
       return acc;
     },
     {
@@ -318,7 +372,10 @@ export function computeFleetFromMix(inputs, constants) {
         battery_usd: 0.0,
         bus_usd: 0.0,
         launch_usd: 0.0
-      }
+      },
+      launch_cost_per_kg_at_altitude: 0.0,
+      launch_mass_multiplier: 0.0,
+      transfer_delta_v_m_s: 0.0
     }
   );
 
@@ -334,7 +391,7 @@ export function computeFleetFromMix(inputs, constants) {
     bus_usd: weighted.component_costs.bus_usd * satellitesNeeded,
     launch_usd: weighted.component_costs.launch_usd * satellitesNeeded
   };
-  const launchCostPerKgAtAltitude = effectiveCostPerKgToAltitudeLinear(inputs.altitude_km, inputs.launch_model);
+  const launchCostPerKgAtAltitude = weighted.launch_cost_per_kg_at_altitude;
   const fleetLaunchMassBreakdownKg = {
     compute_kg: weighted.mass_components_kg.compute_kg * satellitesNeeded,
     array_kg: weighted.mass_components_kg.array_kg * satellitesNeeded,
@@ -360,8 +417,12 @@ export function computeFleetFromMix(inputs, constants) {
     sunlight_fraction_weighted: weighted.sunlight_fraction,
     sat_capex_weighted_usd: weighted.capex_usd,
     sat_mass_weighted_kg: weighted.mass_kg,
+    sat_array_mass_weighted_kg: weighted.mass_components_kg.array_kg,
+    sat_radiator_mass_weighted_kg: weighted.mass_components_kg.radiator_kg,
     beta_mix_used: mix,
     launch_cost_per_kg_at_altitude: launchCostPerKgAtAltitude,
+    launch_mass_multiplier_at_altitude: weighted.launch_mass_multiplier,
+    transfer_delta_v_m_s: weighted.transfer_delta_v_m_s,
     fleet_component_costs_usd: fleetComponentCosts,
     fleet_launch_mass_breakdown_kg: fleetLaunchMassBreakdownKg,
     fleet_launch_cost_breakdown_usd: fleetLaunchCostBreakdownUsd,

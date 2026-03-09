@@ -13,11 +13,12 @@ const state = {
   betaCustomShares: {},
   constellationPhase: 0,
   constellationSpeedRps: 0.35,
-  constellationAnimating: true,
+  constellationAnimating: false,
   constellationFrameHandle: null,
   constellationLastTickMs: null,
   constellationStarfield: null,
-  constellationAnimationModel: null
+  constellationAnimationModel: null,
+  constellationCanvas: null
 };
 
 const EARTH_RADIUS_KM = 6371;
@@ -45,15 +46,24 @@ const els = {
   launchPreset: document.getElementById("launch-preset"),
   launchBaseCost: document.getElementById("launch-base-cost-per-kg"),
   launchBaseCostValue: document.getElementById("launch-base-cost-per-kg-value"),
-  launchIncrementalCost: document.getElementById("launch-incremental-cost-per-kg-per-km"),
-  launchIncrementalCostValue: document.getElementById("launch-incremental-cost-per-kg-per-km-value"),
+  ispTransfer: document.getElementById("isp-transfer-s"),
+  ispTransferValue: document.getElementById("isp-transfer-s-value"),
+  propulsionStructFrac: document.getElementById("propulsion-struct-frac"),
+  propulsionStructFracValue: document.getElementById("propulsion-struct-frac-value"),
   launchBaselineAltValue: document.getElementById("launch-baseline-altitude-value"),
   launchPresetSource: document.getElementById("launch-preset-source"),
   arraySpecificPower: document.getElementById("array-specific-power-w-per-kg"),
   arraySpecificPowerValue: document.getElementById("array-specific-power-w-per-kg-value"),
+  epsilon: document.getElementById("epsilon"),
+  epsilonValue: document.getElementById("epsilon-value"),
+  radiatorArealDensity: document.getElementById("radiator-areal-density"),
+  radiatorArealDensityValue: document.getElementById("radiator-areal-density-value"),
+  parameterAnchorCards: document.getElementById("parameter-anchor-cards"),
   kpiSpacePremium: document.getElementById("kpi-space-premium"),
   kpiFleetCapex: document.getElementById("kpi-fleet-capex"),
   kpiGpuCost: document.getElementById("kpi-gpu-cost"),
+  kpiLaunchCost: document.getElementById("kpi-launch-cost"),
+  kpiSatMass: document.getElementById("kpi-sat-mass"),
   kpiSatellites: document.getElementById("kpi-satellites"),
   chartCostSplit: document.getElementById("chart-cost-split"),
   chartPremiumVsMw: document.getElementById("chart-premium-vs-mw"),
@@ -63,6 +73,7 @@ const els = {
   chartLaunchBreakdownNote: document.getElementById("chart-launch-breakdown-note"),
   chartConstellation: document.getElementById("chart-constellation"),
   chartConstellationNote: document.getElementById("chart-constellation-note"),
+  constellationInsights: document.getElementById("constellation-insights"),
   constellationPlayToggle: document.getElementById("constellation-play-toggle"),
   constellationSpeed: document.getElementById("constellation-speed"),
   constellationSpeedValue: document.getElementById("constellation-speed-value"),
@@ -70,7 +81,8 @@ const els = {
   referenceMeta: document.getElementById("reference-meta"),
   referenceInputs: document.getElementById("reference-inputs"),
   referenceOutputs: document.getElementById("reference-outputs"),
-  referenceDiff: document.getElementById("reference-diff")
+  referenceDiff: document.getElementById("reference-diff"),
+  sourceFootnotesList: document.getElementById("source-footnotes-list")
 };
 
 const BETA_COLOR_SCALE = {
@@ -132,6 +144,10 @@ function niceStep(rawStep) {
   return 10 * magnitude;
 }
 
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function buildDollarAxis(maxValue) {
   const ceiling = Math.max(1, maxValue);
   const step = niceStep(ceiling / 5);
@@ -155,6 +171,14 @@ function applyRangeConfig(inputEl, valueEl, config, formatter) {
   valueEl.textContent = formatter(config.default);
 }
 
+function formatReferenceTokens(ids, options = {}) {
+  const { linked = false } = options;
+  if (!Array.isArray(ids) || ids.length === 0) return "";
+  return ids
+    .map((id) => (linked ? `<a class="footnote-token" href="#ref-${id}">[${id}]</a>` : `[${id}]`))
+    .join(" ");
+}
+
 function applyParameterTooltips(defaults) {
   const ranges = defaults.ranges;
   const betaDefaultKey = ranges.beta_preset.default;
@@ -162,40 +186,54 @@ function applyParameterTooltips(defaults) {
   const activeLaunchPreset = defaults.launch_cost_presets[els.launchPreset.value];
   const launchDefaultKey = ranges.launch_preset.default;
   const launchDefaultLabel = defaults.launch_cost_presets[launchDefaultKey]?.label || launchDefaultKey;
+  const parameterRefMap = defaults.parameter_reference_map || {};
+  const withRefs = (key, text) => {
+    const refs = formatReferenceTokens(parameterRefMap[key]);
+    return refs ? `${text} Sources: ${refs}.` : text;
+  };
 
   const tooltips = {
-    datacenter_mw:
+    datacenter_mw: withRefs("datacenter_mw",
       `How much terrestrial datacenter power you want space infrastructure to replace. ` +
-      `Larger values scale satellites and total cost. Good default: ${ranges.datacenter_mw.default} MW.`,
-    altitude_km:
+      `Larger values scale satellites and total cost. Good default: ${ranges.datacenter_mw.default} MW.`),
+    altitude_km: withRefs("altitude_km",
       `Target orbital altitude for the constellation. Higher altitude can shift launch cost and fleet sizing. ` +
-      `Good default: ${ranges.altitude_km.default} km.`,
-    gpu_temp_c:
+      `Good default: ${ranges.altitude_km.default} km.`),
+    gpu_temp_c: withRefs("gpu_temp_c",
       `Estimated operating temperature of the GPU heat source. This affects radiator performance and mass. ` +
-      `Good default: ${ranges.gpu_temp_c.default} °C.`,
-    transport_delta_t_c:
+      `Good default: ${ranges.gpu_temp_c.default} °C.`),
+    transport_delta_t_c: withRefs("transport_delta_t_c",
       `Temperature drop budget between the GPU source and the radiator surface. ` +
       `Higher values make radiator rejection easier in this simplified model. ` +
-      `Good default: ${ranges.transport_delta_t_c.default} °C.`,
-    overhead_frac:
+      `Good default: ${ranges.transport_delta_t_c.default} °C.`),
+    overhead_frac: withRefs("overhead_frac",
       `Extra non-compute electrical load fraction (power conversion, pumping, controls, and support systems). ` +
-      `Good default: ${(ranges.overhead_frac.default * 100).toFixed(0)}%.`,
-    launch_preset:
-      `Select a launch pricing assumption package. It sets recommended base and altitude-dependent launch costs. ` +
-      `Good default: ${launchDefaultLabel}.`,
-    launch_base_cost_per_kg:
-      `Launch price per kg to the preset baseline altitude before altitude adjustments. ` +
-      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.base_cost_per_kg, { compact: false })} / kg).`,
-    launch_incremental_cost_per_kg_per_km:
-      `Additional launch price per kg for each km above baseline altitude. ` +
-      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.incremental_cost_per_kg_per_km, { compact: false })} / kg / km).`,
-    array_specific_power_w_per_kg:
-      `Solar array watts delivered per kg of array mass. Higher values reduce array mass for the same power demand. ` +
-      `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg.`,
-    beta_preset:
+      `Good default: ${(ranges.overhead_frac.default * 100).toFixed(0)}%.`),
+    launch_preset: withRefs("launch_preset",
+      `Select a notebook-anchored launch package. It sets the baseline $/kg to 550 km plus the transfer Isp and propulsion dry-mass assumptions used to compute altitude penalties. ` +
+      `Good default: ${launchDefaultLabel}. Future Starship-style options here are sensitivity cases, not current procurement quotes.`),
+    launch_base_cost_per_kg: withRefs("launch_base_cost_per_kg",
+      `Launch price per kg to the preset baseline altitude before the notebook's Hohmann-transfer mass multiplier is applied. ` +
+      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.base_cost_per_kg, { compact: false })} / kg).`),
+    isp_transfer_s: withRefs("isp_transfer_s",
+      `Specific impulse for the altitude-raising kick stage or tug equivalent. Higher Isp lowers the mass multiplier for higher orbits. ` +
+      `Good default: ${activeLaunchPreset.isp_s.toFixed(0)} s.`),
+    propulsion_struct_frac: withRefs("propulsion_struct_frac",
+      `Kick-stage dry mass as a fraction of propellant mass. Higher values make altitude changes more expensive because more dry hardware must also be launched. ` +
+      `Good default: ${(activeLaunchPreset.propulsion_struct_frac * 100).toFixed(0)}%.`),
+    array_specific_power_w_per_kg: withRefs("array_specific_power_w_per_kg",
+      `Solar array watts delivered per kg of array mass. Higher values reduce array mass and therefore reduce launch cost too. ` +
+      `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg. Values meaningfully above the 200 W/kg notebook anchor should be treated as future sensitivity cases rather than current public anchors.`),
+    epsilon: withRefs("epsilon",
+      `Radiator emissivity. Higher emissivity improves heat rejection per square meter, which reduces radiator area and mass. ` +
+      `Good default: ${ranges.epsilon.default.toFixed(2)}.`),
+    radiator_areal_density_kg_per_m2: withRefs("radiator_areal_density_kg_per_m2",
+      `Radiator mass per square meter. Higher values make the same radiator area heavier and increase both satellite mass and launch spend. ` +
+      `Good default: ${ranges.radiator_areal_density_kg_per_m2.default.toFixed(1)} kg/m².`),
+    beta_preset: withRefs("beta_preset",
       `Distribution of orbital beta angles used to estimate sunlight availability across the constellation. ` +
       `Lower beta angles generally include more eclipse time, while higher beta angles tend to have longer sunlit windows. ` +
-      `Good default: ${betaDefaultLabel}.`
+      `Good default: ${betaDefaultLabel}.`)
   };
 
   document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
@@ -205,6 +243,33 @@ function applyParameterTooltips(defaults) {
       trigger.setAttribute("title", message);
     }
   });
+}
+
+function renderParameterAnchorCards(defaults) {
+  els.parameterAnchorCards.innerHTML = (defaults.parameter_reference_cards || [])
+    .map((card) => `
+      <article class="parameter-anchor-card">
+        <p class="parameter-anchor-title">${card.title}</p>
+        <strong>${card.value}</strong>
+        <p>${card.detail}</p>
+        <p class="parameter-anchor-refs">${formatReferenceTokens(card.refs, { linked: true })}</p>
+      </article>
+    `)
+    .join("");
+}
+
+function renderSourceFootnotes(defaults) {
+  const refs = defaults.references || [];
+  els.sourceFootnotesList.innerHTML = refs
+    .map((ref) => `
+      <article class="source-footnote" id="ref-${ref.id}">
+        <p class="source-footnote-id">[${ref.id}] ${ref.category}</p>
+        <h3>${ref.title}</h3>
+        <p>${ref.detail}</p>
+        ${ref.url ? `<a href="${ref.url}" target="_blank" rel="noopener noreferrer">Open source</a>` : `<span class="source-footnote-note">Notebook assumption / derivation note</span>`}
+      </article>
+    `)
+    .join("");
 }
 
 function collectBetaAngles(defaults) {
@@ -372,8 +437,11 @@ function updateValueLabels() {
   els.transportDeltaTValue.textContent = `${Number(els.transportDeltaT.value).toFixed(0)} °C`;
   els.overheadFracValue.textContent = `${(Number(els.overheadFrac.value) * 100).toFixed(1)}%`;
   els.launchBaseCostValue.textContent = `${formatCurrency(Number(els.launchBaseCost.value), { compact: false })} / kg`;
-  els.launchIncrementalCostValue.textContent = `${formatCurrency(Number(els.launchIncrementalCost.value), { compact: false })} / kg / km`;
+  els.ispTransferValue.textContent = `${Number(els.ispTransfer.value).toFixed(0)} s`;
+  els.propulsionStructFracValue.textContent = `${(Number(els.propulsionStructFrac.value) * 100).toFixed(1)}%`;
   els.arraySpecificPowerValue.textContent = `${Number(els.arraySpecificPower.value).toFixed(0)} W/kg`;
+  els.epsilonValue.textContent = Number(els.epsilon.value).toFixed(2);
+  els.radiatorArealDensityValue.textContent = `${Number(els.radiatorArealDensity.value).toFixed(1)} kg/m²`;
   const selectedLaunchPreset = state.defaults.launch_cost_presets[els.launchPreset.value];
   els.launchBaselineAltValue.textContent = `${selectedLaunchPreset.base_alt_km.toFixed(0)} km`;
 }
@@ -391,15 +459,19 @@ function getCurrentInputPayload() {
     transport_delta_t_c: Number(els.transportDeltaT.value),
     overhead_frac: Number(els.overheadFrac.value),
     launch_base_cost_per_kg: Number(els.launchBaseCost.value),
-    launch_incremental_cost_per_kg_per_km: Number(els.launchIncrementalCost.value),
+    isp_transfer_s: Number(els.ispTransfer.value),
+    propulsion_struct_frac: Number(els.propulsionStructFrac.value),
     array_specific_power_w_per_kg: Number(els.arraySpecificPower.value),
+    epsilon: Number(els.epsilon.value),
+    radiator_areal_density_kg_per_m2: Number(els.radiatorArealDensity.value),
     beta_preset: selectedPreset,
     beta_mix: activeBetaMix,
     launch_preset: els.launchPreset.value,
     launch_model: {
       base_alt_km: Number(launchPreset.base_alt_km),
       base_cost_per_kg: Number(els.launchBaseCost.value),
-      incremental_cost_per_kg_per_km: Number(els.launchIncrementalCost.value)
+      isp_s: Number(els.ispTransfer.value),
+      propulsion_struct_frac: Number(els.propulsionStructFrac.value)
     }
   };
 }
@@ -415,6 +487,8 @@ function renderKpis(result) {
   els.kpiSpacePremium.textContent = compactMoney(result.space_premium_usd);
   els.kpiFleetCapex.textContent = compactMoney(result.fleet_capex_usd);
   els.kpiGpuCost.textContent = compactMoney(result.fleet_gpu_cost_usd);
+  els.kpiLaunchCost.textContent = `${formatCurrency(result.launch_cost_per_kg_at_altitude)} / kg`;
+  els.kpiSatMass.textContent = `${(result.sat_mass_weighted_kg / 1000).toFixed(2)} t / sat`;
   els.kpiSatellites.textContent = new Intl.NumberFormat("en-US").format(result.satellites_needed);
 }
 
@@ -671,9 +745,11 @@ function renderLaunchBreakdownChart(result) {
   const launchMass = result.fleet_launch_mass_breakdown_kg;
   const totalMass = launchMass.compute_kg + launchMass.array_kg + launchMass.radiator_kg + launchMass.bus_kg + launchMass.battery_kg;
   const arraysMassShare = totalMass > 0 ? (100 * launchMass.array_kg) / totalMass : 0;
+  const radiatorMassShare = totalMass > 0 ? (100 * launchMass.radiator_kg) / totalMass : 0;
   els.chartLaunchBreakdownNote.textContent =
-    `Stacked launch bar allocates launch spend by mass contribution at ${formatCurrency(result.launch_cost_per_kg_at_altitude)} / kg. ` +
-    `Arrays contribute ${arraysMassShare.toFixed(1)}% of launched mass in this scenario.`;
+    `Stacked launch bar allocates launch spend by mass contribution at ${formatCurrency(result.launch_cost_per_kg_at_altitude)} / kg ` +
+    `(mass multiplier ${result.launch_mass_multiplier_at_altitude.toFixed(2)}x). ` +
+    `Arrays contribute ${arraysMassShare.toFixed(1)}% of launched mass and radiators contribute ${radiatorMassShare.toFixed(1)}%.`;
 }
 
 function allocateSatellitesByMix(totalSatellites, mix) {
@@ -699,77 +775,9 @@ function allocateSatellitesByMix(totalSatellites, mix) {
   return base.map(({ betaDeg, count }) => ({ betaDeg, count }));
 }
 
-function buildEarthSurfaceTrace() {
-  const latSteps = 18;
-  const lonSteps = 36;
-  const x = [];
-  const y = [];
-  const z = [];
-  const surfaceColor = [];
-
-  for (let i = 0; i <= latSteps; i += 1) {
-    const lat = (-Math.PI / 2) + (i * Math.PI / latSteps);
-    x[i] = [];
-    y[i] = [];
-    z[i] = [];
-    surfaceColor[i] = [];
-    for (let j = 0; j <= lonSteps; j += 1) {
-      const lon = (j * 2 * Math.PI) / lonSteps;
-      const xVal = Math.cos(lat) * Math.cos(lon);
-      const yVal = Math.cos(lat) * Math.sin(lon);
-      const zVal = Math.sin(lat);
-      x[i].push(xVal);
-      y[i].push(yVal);
-      z[i].push(zVal);
-      surfaceColor[i].push((zVal + 1) / 2);
-    }
-  }
-
-  return {
-    type: "surface",
-    x,
-    y,
-    z,
-    surfacecolor: surfaceColor,
-    colorscale: THEME_COLORS.earthScale,
-    showscale: false,
-    opacity: 0.92,
-    hoverinfo: "skip"
-  };
-}
-
-function buildOrbitFamilyTrace(radiusEarthUnits, betaDeg, orbitColor) {
-  const steps = 240;
-  const x = [];
-  const y = [];
-  const z = [];
-  const tilt = (betaDeg * Math.PI) / 180;
-
-  for (let i = 0; i <= steps; i += 1) {
-    const theta = (i * 2 * Math.PI) / steps;
-    const xr = radiusEarthUnits * Math.cos(theta);
-    const yr = radiusEarthUnits * Math.sin(theta);
-    x.push(xr);
-    y.push(yr * Math.cos(tilt));
-    z.push(yr * Math.sin(tilt));
-  }
-
-  return {
-    type: "scatter3d",
-    mode: "lines",
-    x,
-    y,
-    z,
-    line: { color: orbitColor, width: 3 },
-    hovertemplate: `${betaDeg}° orbit family<extra></extra>`,
-    showlegend: true,
-    name: `${betaDeg}° orbit`
-  };
-}
-
 function sampleSatelliteCount(totalSatellites) {
   if (totalSatellites <= 180) return totalSatellites;
-  return Math.min(280, Math.max(140, Math.round(Math.sqrt(totalSatellites) * 7.5)));
+  return Math.min(180, Math.max(96, Math.round(Math.sqrt(totalSatellites) * 5.2)));
 }
 
 function allocateDisplaySamplesByFamily(allocations, displayTotal) {
@@ -801,165 +809,262 @@ function allocateDisplaySamplesByFamily(allocations, displayTotal) {
   return base.map(({ betaDeg, displayCount }) => ({ betaDeg, displayCount }));
 }
 
-function buildOrbitPositions(radiusEarthUnits, betaDeg, pointCount, phaseOffset = 0) {
-  const x = [];
-  const y = [];
-  const z = [];
-  const tilt = (betaDeg * Math.PI) / 180;
-  for (let i = 0; i < pointCount; i += 1) {
-    const theta = (i * 2 * Math.PI) / Math.max(pointCount, 1) + phaseOffset;
-    const xr = radiusEarthUnits * Math.cos(theta);
-    const yr = radiusEarthUnits * Math.sin(theta);
-    x.push(xr);
-    y.push(yr * Math.cos(tilt));
-    z.push(yr * Math.sin(tilt));
-  }
-  return { x, y, z };
-}
-
-function buildSatelliteDensityTrace(radiusEarthUnits, betaDeg, fullCount, displayCount, orbitColor, phaseOffset) {
-  const points = buildOrbitPositions(radiusEarthUnits, betaDeg, displayCount, phaseOffset);
-  const size = fullCount > 300 ? 2.4 : 2.9;
-
-  return {
-    type: "scatter3d",
-    mode: "markers",
-    ...points,
-    marker: {
-      color: orbitColor,
-      size,
-      opacity: 0.52
-    },
-    hovertemplate: `${betaDeg}° beta family<br>Total satellites: ${new Intl.NumberFormat("en-US").format(fullCount)}<extra></extra>`,
-    showlegend: false
-  };
-}
-
-function buildMotionPacketPoints(radiusEarthUnits, betaDeg, phase, packetSize = 6, spacing = 0.18) {
-  const x = [];
-  const y = [];
-  const z = [];
-  const tilt = (betaDeg * Math.PI) / 180;
-  for (let k = 0; k < packetSize; k += 1) {
-    const theta = phase - k * spacing;
-    const xr = radiusEarthUnits * Math.cos(theta);
-    const yr = radiusEarthUnits * Math.sin(theta);
-    x.push(xr);
-    y.push(yr * Math.cos(tilt));
-    z.push(yr * Math.sin(tilt));
-  }
-  return { x, y, z };
-}
-
-function buildMotionPacketTrace(radiusEarthUnits, betaDeg, orbitColor, phase) {
-  const packetSize = 6;
-  const points = buildMotionPacketPoints(radiusEarthUnits, betaDeg, phase, packetSize);
-  const markerSize = [7.2, 6.3, 5.5, 4.8, 4.1, 3.5];
-  const markerOpacity = [0.96, 0.8, 0.64, 0.5, 0.4, 0.28];
-
-  return {
-    type: "scatter3d",
-    mode: "markers",
-    ...points,
-    marker: {
-      color: orbitColor,
-      size: markerSize,
-      opacity: markerOpacity
-    },
-    hovertemplate: `${betaDeg}° orbit motion packet<extra></extra>`,
-    showlegend: false
-  };
-}
-
-function buildAtmosphereTrace() {
-  const latSteps = 16;
-  const lonSteps = 32;
-  const radius = 1.05;
-  const x = [];
-  const y = [];
-  const z = [];
-  for (let i = 0; i <= latSteps; i += 1) {
-    const lat = (-Math.PI / 2) + (i * Math.PI / latSteps);
-    x[i] = [];
-    y[i] = [];
-    z[i] = [];
-    for (let j = 0; j <= lonSteps; j += 1) {
-      const lon = (j * 2 * Math.PI) / lonSteps;
-      x[i].push(radius * Math.cos(lat) * Math.cos(lon));
-      y[i].push(radius * Math.cos(lat) * Math.sin(lon));
-      z[i].push(radius * Math.sin(lat));
-    }
-  }
-  return {
-    type: "surface",
-    x,
-    y,
-    z,
-    opacity: 0.12,
-    showscale: false,
-    colorscale: [
-      [0, THEME_COLORS.atmosphere],
-      [1, THEME_COLORS.atmosphere]
-    ],
-    hoverinfo: "skip"
-  };
-}
-
-function getStarfieldTrace() {
+function getStarfieldPoints() {
   if (state.constellationStarfield) {
     return state.constellationStarfield;
   }
 
-  const count = 160;
-  const radius = 4.3;
-  const x = [];
-  const y = [];
-  const z = [];
-  const size = [];
+  const count = 140;
+  const stars = [];
 
   for (let i = 0; i < count; i += 1) {
-    const theta = (i * 137.507764) * Math.PI / 180;
-    const v = -1 + (2 * (i + 0.5)) / count;
-    const phi = Math.acos(v);
-    x.push(radius * Math.sin(phi) * Math.cos(theta));
-    y.push(radius * Math.sin(phi) * Math.sin(theta));
-    z.push(radius * Math.cos(phi));
-    size.push((i % 3) + 1.4);
+    const x = ((i * 73) % count) / count;
+    const y = ((i * 29 + 17) % count) / count;
+    stars.push({
+      x,
+      y,
+      size: 0.7 + (i % 3) * 0.55,
+      alpha: 0.24 + (i % 5) * 0.11
+    });
   }
 
-  state.constellationStarfield = {
-    type: "scatter3d",
-    mode: "markers",
-    x,
-    y,
-    z,
-    marker: {
-      size,
-      color: THEME_COLORS.starfield,
-      opacity: 0.55
-    },
-    hoverinfo: "skip",
-    showlegend: false
-  };
+  state.constellationStarfield = stars;
 
   return state.constellationStarfield;
 }
 
-function buildSunVectorTrace() {
+function ensureConstellationCanvas() {
+  if (state.constellationCanvas && els.chartConstellation.contains(state.constellationCanvas)) {
+    return state.constellationCanvas;
+  }
+
+  els.chartConstellation.innerHTML = "";
+  const canvas = document.createElement("canvas");
+  canvas.className = "constellation-canvas";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "Perspective constellation diagram");
+  els.chartConstellation.appendChild(canvas);
+  state.constellationCanvas = canvas;
+  return canvas;
+}
+
+function resizeConstellationCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(320, Math.round(rect.width));
+  const height = Math.max(340, Math.round(rect.height));
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, width, height };
+}
+
+function projectOrbitPoint(theta, orbitRadiusPx, betaDeg, orbitYawRad = -0.68, orbitPitchRad = 0.88) {
+  const beta = (betaDeg * Math.PI) / 180;
+  const x3 = orbitRadiusPx * Math.cos(theta);
+  const y3 = orbitRadiusPx * Math.sin(theta) * Math.cos(beta);
+  const z3 = orbitRadiusPx * Math.sin(theta) * Math.sin(beta);
+
+  const xYaw = x3 * Math.cos(orbitYawRad) - y3 * Math.sin(orbitYawRad);
+  const yYaw = x3 * Math.sin(orbitYawRad) + y3 * Math.cos(orbitYawRad);
+  const yPitch = yYaw * Math.cos(orbitPitchRad) - z3 * Math.sin(orbitPitchRad);
+  const zPitch = yYaw * Math.sin(orbitPitchRad) + z3 * Math.cos(orbitPitchRad);
+
   return {
-    type: "scatter3d",
-    mode: "lines+markers+text",
-    x: [1.35, 2.25],
-    y: [0, 0],
-    z: [0, 0],
-    line: { color: THEME_COLORS.sunlight, width: 8 },
-    marker: { size: [0, 7], color: THEME_COLORS.sunlight },
-    text: ["", "Sunlight"],
-    textposition: "top center",
-    textfont: { size: 11, color: THEME_COLORS.sunlightText },
-    hovertemplate: "Incoming solar direction<extra></extra>",
-    showlegend: false
+    x: xYaw,
+    y: yPitch,
+    depth: zPitch
   };
+}
+
+function buildProjectedOrbit(orbitRadiusPx, betaDeg, steps = 200) {
+  const points = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const theta = (i * 2 * Math.PI) / steps;
+    points.push(projectOrbitPoint(theta, orbitRadiusPx, betaDeg));
+  }
+  return points;
+}
+
+function buildProjectedSatellitePoints(orbitRadiusPx, betaDeg, pointCount, phaseOffset = 0) {
+  const points = [];
+  for (let i = 0; i < pointCount; i += 1) {
+    const theta = (i * 2 * Math.PI) / Math.max(pointCount, 1) + phaseOffset;
+    points.push(projectOrbitPoint(theta, orbitRadiusPx, betaDeg));
+  }
+  return points;
+}
+
+function sunlightFractionForBeta(altKm, betaDeg) {
+  const orbitalRadiusKm = EARTH_RADIUS_KM + altKm;
+  const beta = (betaDeg * Math.PI) / 180;
+  const ratio = EARTH_RADIUS_KM / orbitalRadiusKm;
+
+  if (Math.abs(Math.sin(beta)) >= ratio) {
+    return 1.0;
+  }
+
+  const numerator = ratio ** 2 - Math.sin(beta) ** 2;
+  const denominator = Math.cos(beta) ** 2;
+  const x = clampValue(numerator / denominator, 0, 1);
+  const thetaE = Math.asin(Math.sqrt(x));
+  return 1.0 - thetaE / Math.PI;
+}
+
+function drawOrbitSegments(ctx, centerX, centerY, points, isFront, color) {
+  ctx.save();
+  ctx.lineWidth = isFront ? 2.3 : 1.2;
+  ctx.strokeStyle = isFront ? color : "rgba(255,255,255,0.16)";
+  ctx.setLineDash(isFront ? [] : [5, 7]);
+
+  let active = false;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const visibleSide = isFront ? point.depth >= 0 : point.depth < 0;
+    const px = centerX + point.x;
+    const py = centerY + point.y;
+    if (visibleSide) {
+      if (!active) {
+        ctx.moveTo(px, py);
+        active = true;
+      } else {
+        ctx.lineTo(px, py);
+      }
+    } else if (active && index !== points.length - 1) {
+      ctx.stroke();
+      ctx.beginPath();
+      active = false;
+    }
+  });
+  if (active) {
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSatelliteLayer(ctx, centerX, centerY, points, color, isFront, baseSize) {
+  ctx.save();
+  points.forEach((point) => {
+    const visibleSide = isFront ? point.depth >= 0 : point.depth < 0;
+    if (!visibleSide) return;
+    const sizeBoost = 0.55 * clampValue(point.depth / Math.max(baseSize * 6, 1), -1, 1);
+    const radius = Math.max(1.1, baseSize + (isFront ? sizeBoost : 0));
+    ctx.fillStyle = isFront ? color : "rgba(255,255,255,0.22)";
+    ctx.globalAlpha = isFront ? 0.8 : 0.35;
+    ctx.beginPath();
+    ctx.arc(centerX + point.x, centerY + point.y, radius, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawMotionPacket(ctx, centerX, centerY, scene) {
+  scene.allocations.forEach((allocation, idx) => {
+    const packetPoints = buildProjectedSatellitePoints(
+      allocation.orbitRadiusPx,
+      allocation.betaDeg,
+      6,
+      state.constellationPhase * allocation.angularRateScale + idx * 0.72
+    );
+    packetPoints.forEach((point, pointIdx) => {
+      if (point.depth < 0) return;
+      const alpha = 0.95 - pointIdx * 0.13;
+      const radius = 5.8 - pointIdx * 0.7;
+      ctx.save();
+      ctx.fillStyle = allocation.color;
+      ctx.globalAlpha = alpha;
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = allocation.color;
+      ctx.beginPath();
+      ctx.arc(centerX + point.x, centerY + point.y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.restore();
+    });
+  });
+}
+
+function drawConstellationScene(scene) {
+  const canvas = ensureConstellationCanvas();
+  const { ctx, width, height } = resizeConstellationCanvas(canvas);
+  const centerX = width * 0.47;
+  const centerY = height * 0.57;
+
+  ctx.clearRect(0, 0, width, height);
+
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#1d1733");
+  bg.addColorStop(0.58, "#2c1e47");
+  bg.addColorStop(1, "#24183c");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  const stars = getStarfieldPoints();
+  stars.forEach((star) => {
+    ctx.fillStyle = `rgba(244, 233, 255, ${star.alpha})`;
+    ctx.beginPath();
+    ctx.arc(star.x * width, star.y * height, star.size, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+
+  scene.allocations.forEach((allocation) => {
+    drawOrbitSegments(ctx, centerX, centerY, allocation.orbitPoints, false, allocation.color);
+    drawSatelliteLayer(ctx, centerX, centerY, allocation.samplePoints, allocation.color, false, allocation.pointSize);
+  });
+
+  const halo = ctx.createRadialGradient(centerX, centerY, scene.earthRadiusPx * 0.7, centerX, centerY, scene.earthRadiusPx * 1.28);
+  halo.addColorStop(0, "rgba(145, 123, 255, 0.08)");
+  halo.addColorStop(1, "rgba(145, 123, 255, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, scene.earthRadiusPx * 1.28, 0, 2 * Math.PI);
+  ctx.fill();
+
+  const planet = ctx.createRadialGradient(
+    centerX - scene.earthRadiusPx * 0.38,
+    centerY - scene.earthRadiusPx * 0.42,
+    scene.earthRadiusPx * 0.14,
+    centerX,
+    centerY,
+    scene.earthRadiusPx
+  );
+  planet.addColorStop(0, "#8d7ff0");
+  planet.addColorStop(0.5, "#5b4ba8");
+  planet.addColorStop(1, "#281f64");
+  ctx.fillStyle = planet;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, scene.earthRadiusPx, 0, 2 * Math.PI);
+  ctx.fill();
+
+  const atmosphere = ctx.createRadialGradient(centerX, centerY, scene.earthRadiusPx, centerX, centerY, scene.earthRadiusPx * 1.08);
+  atmosphere.addColorStop(0, "rgba(169, 156, 248, 0)");
+  atmosphere.addColorStop(1, "rgba(169, 156, 248, 0.36)");
+  ctx.strokeStyle = atmosphere;
+  ctx.lineWidth = scene.earthRadiusPx * 0.16;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, scene.earthRadiusPx * 1.02, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath();
+  ctx.ellipse(centerX - scene.earthRadiusPx * 0.22, centerY - scene.earthRadiusPx * 0.15, scene.earthRadiusPx * 0.28, scene.earthRadiusPx * 0.18, -0.45, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.restore();
+
+  scene.allocations.forEach((allocation) => {
+    drawOrbitSegments(ctx, centerX, centerY, allocation.orbitPoints, true, allocation.color);
+    drawSatelliteLayer(ctx, centerX, centerY, allocation.samplePoints, allocation.color, true, allocation.pointSize);
+  });
+
+  drawMotionPacket(ctx, centerX, centerY, scene);
+
+  ctx.fillStyle = "rgba(255, 250, 255, 0.78)";
+  ctx.font = "600 12px \"Plus Jakarta Sans\", sans-serif";
+  ctx.fillText("2D perspective constellation sketch", 18, 28);
+  ctx.fillStyle = "rgba(255, 250, 255, 0.52)";
+  ctx.font = "500 11px \"Plus Jakarta Sans\", sans-serif";
+  ctx.fillText("Earth-centered, illustrative rather than orbital-propagated", 18, 46);
 }
 
 function sunlightTendencyLabel(betaDeg) {
@@ -985,83 +1090,78 @@ function renderConstellationFamilyCards(allocations, totalSatellites) {
     .join("");
 }
 
+function renderConstellationInsights(allocations, totalSatellites, inputs) {
+  els.constellationInsights.innerHTML = allocations
+    .map((allocation) => {
+      const sharePct = totalSatellites > 0 ? (100 * allocation.count) / totalSatellites : 0;
+      const sunlight = sunlightFractionForBeta(inputs.altitude_km, allocation.betaDeg);
+      const color = BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback;
+      return `
+        <article class="constellation-insight-card">
+          <div class="constellation-insight-head">
+            <h4><span class="beta-dot" style="background:${color}"></span>${allocation.betaDeg}° beta</h4>
+            <strong>${allocation.count.toLocaleString()}</strong>
+          </div>
+          <p>${sharePct.toFixed(1)}% of the fleet</p>
+          <div class="constellation-insight-metric">
+            <span>Sunlight fraction</span>
+            <strong>${(sunlight * 100).toFixed(1)}%</strong>
+          </div>
+          <div class="constellation-insight-bar" aria-hidden="true">
+            <span style="width:${(sunlight * 100).toFixed(1)}%; background:${color}"></span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderConstellationChart(result, inputs) {
-  const orbitRadius = 1 + (inputs.altitude_km / EARTH_RADIUS_KM);
   const allocations = allocateSatellitesByMix(result.satellites_needed, result.beta_mix_used);
   const displayTotal = sampleSatelliteCount(result.satellites_needed);
   const displayAllocations = allocateDisplaySamplesByFamily(allocations, displayTotal);
-  const traces = [getStarfieldTrace(), buildAtmosphereTrace(), buildEarthSurfaceTrace(), buildSunVectorTrace()];
-  const animationModel = [];
-
-  allocations.forEach((allocation, idx) => {
-    const color = BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback;
-    const displayCount = displayAllocations.find((row) => row.betaDeg === allocation.betaDeg)?.displayCount || 0;
-    const familyPhase = state.constellationPhase + idx * 0.72;
-    const angularRateScale = 0.7 + idx * 0.17;
-    traces.push(buildOrbitFamilyTrace(orbitRadius, allocation.betaDeg, color));
-    traces.push(buildSatelliteDensityTrace(orbitRadius, allocation.betaDeg, allocation.count, displayCount, color, familyPhase));
-    traces.push(buildMotionPacketTrace(orbitRadius, allocation.betaDeg, color, familyPhase));
-    animationModel.push({
-      traceIndex: traces.length - 1,
-      betaDeg: allocation.betaDeg,
-      orbitRadius,
-      basePhase: idx * 0.72,
-      angularRateScale
-    });
-  });
-
-  const axisRange = Math.max(1.2, orbitRadius * 1.12);
-  const layout = {
-    margin: { t: 8, r: 4, b: 4, l: 4 },
-    font: { family: "\"Plus Jakarta Sans\", \"Segoe UI\", sans-serif", color: THEME_COLORS.chartText },
-    scene: {
-      xaxis: { visible: false, range: [-axisRange, axisRange] },
-      yaxis: { visible: false, range: [-axisRange, axisRange] },
-      zaxis: { visible: false, range: [-axisRange, axisRange] },
-      aspectmode: "cube",
-      camera: {
-        eye: { x: 1.45, y: 1.2, z: 0.86 }
-      },
-      bgcolor: "rgba(0,0,0,0)"
-    },
-    legend: {
-      orientation: "h",
-      x: 0.02,
-      y: 1.04,
-      xanchor: "left",
-      yanchor: "bottom",
-      bgcolor: THEME_COLORS.legendBg
-    },
-    paper_bgcolor: "rgba(0,0,0,0)",
-    annotations: [
-      {
-        text: "Earth-centered view",
-        x: 0,
-        y: 0,
-        xref: "paper",
-        yref: "paper",
-        xanchor: "left",
-        yanchor: "bottom",
-        showarrow: false,
-        font: { size: 11, color: THEME_COLORS.annotation }
-      }
-    ]
+  const canvas = ensureConstellationCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(rect.width || els.chartConstellation.clientWidth || 320, 320);
+  const height = Math.max(rect.height || els.chartConstellation.clientHeight || 340, 340);
+  const orbitRadiusNormalized = 1 + (inputs.altitude_km / EARTH_RADIUS_KM);
+  const orbitRadiusPxMax = Math.min(width * 0.46, height * 0.41);
+  const earthRadiusPx = orbitRadiusPxMax / orbitRadiusNormalized;
+  const scene = {
+    earthRadiusPx,
+    allocations: allocations.map((allocation, idx) => {
+      const displayCount = displayAllocations.find((row) => row.betaDeg === allocation.betaDeg)?.displayCount || 0;
+      const orbitRadiusPx = earthRadiusPx * orbitRadiusNormalized;
+      const pointSize = allocation.count > 300 ? 2.1 : 2.6;
+      return {
+        betaDeg: allocation.betaDeg,
+        count: allocation.count,
+        color: BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback,
+        angularRateScale: 0.75 + idx * 0.14,
+        orbitRadiusPx,
+        pointSize,
+        orbitPoints: buildProjectedOrbit(orbitRadiusPx, allocation.betaDeg, 220),
+        samplePoints: buildProjectedSatellitePoints(orbitRadiusPx, allocation.betaDeg, displayCount, idx * 0.58)
+      };
+    })
   };
-
-  Plotly.react(els.chartConstellation, traces, layout, {
-    responsive: true,
-    displayModeBar: false
-  });
-  state.constellationAnimationModel = animationModel;
+  state.constellationAnimationModel = scene;
+  drawConstellationScene(scene);
+  if (state.constellationAnimating) {
+    startConstellationAnimation();
+  } else {
+    stopConstellationAnimation();
+  }
 
   const mixSummary = allocations
     .map((row) => `${row.betaDeg}°: ${new Intl.NumberFormat("en-US").format(row.count)}`)
     .join(" | ");
   els.chartConstellationNote.textContent =
     `Showing full constellation: ${new Intl.NumberFormat("en-US").format(result.satellites_needed)} satellites at ${inputs.altitude_km.toFixed(0)} km. ` +
-    `Orbit-family allocation by beta mix: ${mixSummary}. Displaying ${new Intl.NumberFormat("en-US").format(displayTotal)} sampled markers plus motion packets for performance. ` +
+    `Orbit-family allocation by beta mix: ${mixSummary}. Displaying ${new Intl.NumberFormat("en-US").format(displayTotal)} sampled satellites in a lightweight 2D perspective sketch. ` +
     `This is a beta-bin representation for visual intuition, not a full orbital mechanics propagation.`;
 
+  renderConstellationInsights(allocations, result.satellites_needed, inputs);
   renderConstellationFamilyCards(allocations, result.satellites_needed);
 }
 
@@ -1076,7 +1176,11 @@ function renderReferencePanel(currentResult, inputs) {
     `GPU temperature: ${refInputs.gpu_temp_c} °C`,
     `Transport ΔT: ${refInputs.transport_delta_t_c} °C`,
     `Launch baseline cost: ${compactMoney(refInputs.launch_base_cost_per_kg, 0)} / kg`,
-    `Launch incremental: ${formatCurrency(refInputs.launch_incremental_cost_per_kg_per_km)} / kg / km`,
+    `Transfer Isp: ${refInputs.isp_transfer_s.toFixed(0)} s`,
+    `Propulsion dry-mass fraction: ${(refInputs.propulsion_struct_frac * 100).toFixed(1)}%`,
+    `Solar array specific power: ${refInputs.array_specific_power_w_per_kg.toFixed(0)} W/kg`,
+    `Radiator emissivity: ${refInputs.epsilon.toFixed(2)}`,
+    `Radiator areal density: ${refInputs.radiator_areal_density_kg_per_m2.toFixed(1)} kg/m²`,
     `Mode: ${refInputs.mode}`,
     `Beta preset: ${refInputs.beta_preset}`
   ]
@@ -1089,6 +1193,8 @@ function renderReferencePanel(currentResult, inputs) {
     `Fleet GPU cost: ${compactMoney(refOutputs.fleet_gpu_cost_usd)}`,
     `Space premium: ${compactMoney(refOutputs.fleet_space_premium_usd)}`,
     `Launch cost at altitude: ${formatCurrency(refOutputs.launch_cost_per_kg_at_altitude)} / kg`,
+    `Launch mass multiplier: ${refOutputs.launch_mass_multiplier_at_altitude.toFixed(2)}x`,
+    `Weighted sat mass: ${(refOutputs.sat_mass_weighted_kg / 1000).toFixed(2)} t`,
     `Satellites needed: ${new Intl.NumberFormat("en-US").format(refOutputs.satellites_needed)}`,
     `Weighted sunlight fraction: ${refOutputs.sunlight_fraction_weighted.toFixed(4)}`
   ]
@@ -1122,6 +1228,8 @@ function renderAll() {
   constants.T_GPU_C = inputs.gpu_temp_c;
   constants.DELTA_T_TO_RADIATOR_C = inputs.transport_delta_t_c;
   constants.ARRAY_SPECIFIC_POWER_W_PER_KG = inputs.array_specific_power_w_per_kg;
+  constants.EPSILON = inputs.epsilon;
+  constants.RADIATOR_AREAL_DENSITY = inputs.radiator_areal_density_kg_per_m2;
 
   const result = computeScenario(inputs, constants);
   renderBetaMixEditor(result);
@@ -1149,44 +1257,20 @@ function updateConstellationPlayButton() {
   els.constellationPlayToggle.textContent = state.constellationAnimating ? "Pause Motion" : "Play Motion";
 }
 
-function restyleConstellationMotionPackets() {
-  const model = state.constellationAnimationModel;
-  if (!Array.isArray(model) || model.length === 0) return;
-
-  const xUpdates = [];
-  const yUpdates = [];
-  const zUpdates = [];
-  const traceIndices = [];
-
-  model.forEach((entry) => {
-    const phase = state.constellationPhase * entry.angularRateScale + entry.basePhase;
-    const points = buildMotionPacketPoints(entry.orbitRadius, entry.betaDeg, phase, 6, 0.18);
-    xUpdates.push(points.x);
-    yUpdates.push(points.y);
-    zUpdates.push(points.z);
-    traceIndices.push(entry.traceIndex);
-  });
-
-  Plotly.restyle(
-    els.chartConstellation,
-    {
-      x: xUpdates,
-      y: yUpdates,
-      z: zUpdates
-    },
-    traceIndices
-  );
+function redrawConstellationScene() {
+  if (!state.constellationAnimationModel) return;
+  drawConstellationScene(state.constellationAnimationModel);
 }
 
-function tickConstellationAnimation() {
-  const now = performance.now();
+function tickConstellationAnimation(now) {
   if (state.constellationLastTickMs == null) {
     state.constellationLastTickMs = now;
+    redrawConstellationScene();
     return;
   }
 
   const dt = (now - state.constellationLastTickMs) / 1000;
-  if (dt < 1 / 24) {
+  if (dt < 1 / 12) {
     return;
   }
   state.constellationLastTickMs = now;
@@ -1195,23 +1279,35 @@ function tickConstellationAnimation() {
   if (!state.constellationAnimationModel) return;
 
   state.constellationPhase += dt * state.constellationSpeedRps * 2 * Math.PI;
-  restyleConstellationMotionPackets();
+  redrawConstellationScene();
 }
 
-function animationLoop() {
-  tickConstellationAnimation();
+function animationLoop(now) {
+  if (!state.constellationAnimating) {
+    state.constellationFrameHandle = null;
+    return;
+  }
+  tickConstellationAnimation(now);
   state.constellationFrameHandle = requestAnimationFrame(animationLoop);
 }
 
 function startConstellationAnimation() {
+  if (!state.constellationAnimating) return;
   if (state.constellationFrameHandle != null) return;
   state.constellationLastTickMs = null;
   state.constellationFrameHandle = requestAnimationFrame(animationLoop);
 }
 
+function stopConstellationAnimation() {
+  if (state.constellationFrameHandle != null) {
+    cancelAnimationFrame(state.constellationFrameHandle);
+    state.constellationFrameHandle = null;
+  }
+}
+
 function scheduleRender() {
   clearTimeout(state.renderTimer);
-  state.renderTimer = setTimeout(renderAll, 60);
+  state.renderTimer = setTimeout(renderAll, 110);
 }
 
 function wireEvents() {
@@ -1223,7 +1319,8 @@ function wireEvents() {
   els.launchPreset.addEventListener("change", () => {
     const preset = state.defaults.launch_cost_presets[els.launchPreset.value];
     els.launchBaseCost.value = preset.base_cost_per_kg;
-    els.launchIncrementalCost.value = preset.incremental_cost_per_kg_per_km;
+    els.ispTransfer.value = preset.isp_s;
+    els.propulsionStructFrac.value = preset.propulsion_struct_frac;
     els.launchPresetSource.innerHTML = preset.source_links
       .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.label}</a>`)
       .join(" | ");
@@ -1264,12 +1361,23 @@ function wireEvents() {
     state.constellationAnimating = !state.constellationAnimating;
     state.constellationLastTickMs = null;
     updateConstellationPlayButton();
+    if (state.constellationAnimating) {
+      startConstellationAnimation();
+    } else {
+      stopConstellationAnimation();
+      redrawConstellationScene();
+    }
   });
 
   els.constellationSpeed.addEventListener("input", () => {
     state.constellationSpeedRps = Number(els.constellationSpeed.value);
     updateConstellationSpeedLabel();
+    if (!state.constellationAnimating) {
+      redrawConstellationScene();
+    }
   });
+
+  window.addEventListener("resize", scheduleRender);
 }
 
 function configureControls(defaults) {
@@ -1305,10 +1413,16 @@ function configureControls(defaults) {
     (v) => `${formatCurrency(v)} / kg`
   );
   applyRangeConfig(
-    els.launchIncrementalCost,
-    els.launchIncrementalCostValue,
-    defaults.ranges.launch_incremental_cost_per_kg_per_km,
-    (v) => `${formatCurrency(v)} / kg / km`
+    els.ispTransfer,
+    els.ispTransferValue,
+    defaults.ranges.isp_transfer_s,
+    (v) => `${v} s`
+  );
+  applyRangeConfig(
+    els.propulsionStructFrac,
+    els.propulsionStructFracValue,
+    defaults.ranges.propulsion_struct_frac,
+    (v) => `${(v * 100).toFixed(1)}%`
   );
   applyRangeConfig(
     els.arraySpecificPower,
@@ -1316,14 +1430,29 @@ function configureControls(defaults) {
     defaults.ranges.array_specific_power_w_per_kg,
     (v) => `${v} W/kg`
   );
+  applyRangeConfig(
+    els.epsilon,
+    els.epsilonValue,
+    defaults.ranges.epsilon,
+    (v) => Number(v).toFixed(2)
+  );
+  applyRangeConfig(
+    els.radiatorArealDensity,
+    els.radiatorArealDensityValue,
+    defaults.ranges.radiator_areal_density_kg_per_m2,
+    (v) => `${Number(v).toFixed(1)} kg/m²`
+  );
 
   const initialLaunchPreset = defaults.launch_cost_presets[els.launchPreset.value];
   els.launchBaseCost.value = initialLaunchPreset.base_cost_per_kg;
-  els.launchIncrementalCost.value = initialLaunchPreset.incremental_cost_per_kg_per_km;
+  els.ispTransfer.value = initialLaunchPreset.isp_s;
+  els.propulsionStructFrac.value = initialLaunchPreset.propulsion_struct_frac;
   els.launchPresetSource.innerHTML = initialLaunchPreset.source_links
     .map((link) => `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.label}</a>`)
     .join(" | ");
   applyParameterTooltips(defaults);
+  renderParameterAnchorCards(defaults);
+  renderSourceFootnotes(defaults);
   configureBetaEditor(defaults);
   els.constellationSpeed.value = state.constellationSpeedRps;
   updateConstellationSpeedLabel();
@@ -1337,8 +1466,11 @@ function configureControls(defaults) {
     els.transportDeltaT,
     els.overheadFrac,
     els.launchBaseCost,
-    els.launchIncrementalCost,
-    els.arraySpecificPower
+    els.ispTransfer,
+    els.propulsionStructFrac,
+    els.arraySpecificPower,
+    els.epsilon,
+    els.radiatorArealDensity
   ];
 }
 
@@ -1353,7 +1485,6 @@ async function init() {
   configureControls(defaults);
   wireEvents();
   renderAll();
-  startConstellationAnimation();
 }
 
 init().catch((err) => {

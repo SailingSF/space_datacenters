@@ -221,6 +221,92 @@ label {
   color: #7b2ea3;
 }
 
+.focus-controls {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: linear-gradient(180deg, #fff7fe 0%, #fffcff 100%);
+  display: grid;
+  gap: 0.85rem;
+}
+
+.focus-controls h3 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.parameter-anchor-cards {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.parameter-anchor-card {
+  border: 1px solid #eadbf4;
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.parameter-anchor-title {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.parameter-anchor-card strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.96rem;
+}
+
+.parameter-anchor-card p:last-child {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.parameter-anchor-refs {
+  margin-top: 0.45rem;
+}
+
+.footnote-token {
+  display: inline-block;
+  margin-right: 0.28rem;
+  color: #7b2ea3;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footnote-token:hover {
+  text-decoration: underline;
+}
+
+.advanced-controls {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0.15rem 0.75rem 0.75rem;
+}
+
+.advanced-controls summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.65rem 0;
+}
+
+.advanced-controls[open] summary {
+  margin-bottom: 0.35rem;
+}
+
+.advanced-controls > label,
+.advanced-controls > .beta-editor {
+  margin-top: 0.75rem;
+}
+
 .beta-editor {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -347,7 +433,7 @@ select {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
 }
 
@@ -429,7 +515,20 @@ select {
 }
 
 .constellation-chart {
-  min-height: 460px;
+  min-height: 380px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(164, 140, 216, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(37, 26, 59, 0.04), rgba(37, 26, 59, 0.1));
+}
+
+.constellation-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  display: block;
+  border-radius: 14px;
 }
 
 .constellation-toolbar {
@@ -475,6 +574,76 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
+.constellation-insights {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.constellation-insight-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: linear-gradient(180deg, #fff9ff 0%, #fffdfd 100%);
+}
+
+.constellation-insight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.constellation-insight-head h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.constellation-insight-head strong {
+  font-size: 0.9rem;
+}
+
+.constellation-insight-card p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.constellation-insight-metric {
+  margin-top: 0.55rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.constellation-insight-metric span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.constellation-insight-metric strong {
+  font-size: 0.88rem;
+}
+
+.constellation-insight-bar {
+  margin-top: 0.35rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #efe8f8;
+}
+
+.constellation-insight-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
 .constellation-family-card {
   border: 1px solid var(--line);
   border-left-width: 4px;
@@ -515,6 +684,59 @@ select {
   color: var(--muted);
 }
 
+.source-footnotes {
+  margin-top: 1rem;
+}
+
+.source-footnotes > p {
+  margin-top: -0.15rem;
+  color: var(--muted);
+}
+
+.source-footnotes-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.8rem;
+}
+
+.source-footnote {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: linear-gradient(180deg, #fffefe 0%, #fff9ff 100%);
+  scroll-margin-top: 1rem;
+}
+
+.source-footnote-id {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.source-footnote h3 {
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.98rem;
+}
+
+.source-footnote p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.source-footnote a,
+.source-footnote-note {
+  display: inline-block;
+  margin-top: 0.45rem;
+  color: #7b2ea3;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 .footer-note {
   color: var(--muted);
   font-size: 0.9rem;
@@ -551,10 +773,6 @@ select {
     grid-template-columns: 340px 1fr;
   }
 
-  .kpi-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .chart-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -565,5 +783,9 @@ select {
 
   .reference-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .source-footnotes-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
