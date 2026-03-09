@@ -73,6 +73,7 @@ const els = {
   chartLaunchBreakdownNote: document.getElementById("chart-launch-breakdown-note"),
   chartConstellation: document.getElementById("chart-constellation"),
   chartConstellationNote: document.getElementById("chart-constellation-note"),
+  constellationInsights: document.getElementById("constellation-insights"),
   constellationPlayToggle: document.getElementById("constellation-play-toggle"),
   constellationSpeed: document.getElementById("constellation-speed"),
   constellationSpeedValue: document.getElementById("constellation-speed-value"),
@@ -895,6 +896,22 @@ function buildProjectedSatellitePoints(orbitRadiusPx, betaDeg, pointCount, phase
   return points;
 }
 
+function sunlightFractionForBeta(altKm, betaDeg) {
+  const orbitalRadiusKm = EARTH_RADIUS_KM + altKm;
+  const beta = (betaDeg * Math.PI) / 180;
+  const ratio = EARTH_RADIUS_KM / orbitalRadiusKm;
+
+  if (Math.abs(Math.sin(beta)) >= ratio) {
+    return 1.0;
+  }
+
+  const numerator = ratio ** 2 - Math.sin(beta) ** 2;
+  const denominator = Math.cos(beta) ** 2;
+  const x = clampValue(numerator / denominator, 0, 1);
+  const thetaE = Math.asin(Math.sqrt(x));
+  return 1.0 - thetaE / Math.PI;
+}
+
 function drawOrbitSegments(ctx, centerX, centerY, points, isFront, color) {
   ctx.save();
   ctx.lineWidth = isFront ? 2.3 : 1.2;
@@ -970,7 +987,7 @@ function drawMotionPacket(ctx, centerX, centerY, scene) {
 function drawConstellationScene(scene) {
   const canvas = ensureConstellationCanvas();
   const { ctx, width, height } = resizeConstellationCanvas(canvas);
-  const centerX = width * 0.39;
+  const centerX = width * 0.47;
   const centerY = height * 0.57;
 
   ctx.clearRect(0, 0, width, height);
@@ -989,28 +1006,6 @@ function drawConstellationScene(scene) {
     ctx.arc(star.x * width, star.y * height, star.size, 0, 2 * Math.PI);
     ctx.fill();
   });
-
-  const sunGlow = ctx.createRadialGradient(width * 0.84, height * 0.18, 8, width * 0.84, height * 0.18, width * 0.18);
-  sunGlow.addColorStop(0, "rgba(255, 214, 137, 0.35)");
-  sunGlow.addColorStop(1, "rgba(255, 214, 137, 0)");
-  ctx.fillStyle = sunGlow;
-  ctx.fillRect(width * 0.66, 0, width * 0.34, height * 0.36);
-
-  ctx.save();
-  ctx.strokeStyle = "rgba(255, 199, 122, 0.85)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(width * 0.76, height * 0.16);
-  ctx.lineTo(width * 0.6, height * 0.16);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(width * 0.6, height * 0.16);
-  ctx.lineTo(width * 0.625, height * 0.145);
-  ctx.lineTo(width * 0.625, height * 0.175);
-  ctx.closePath();
-  ctx.fillStyle = "rgba(255, 199, 122, 0.92)";
-  ctx.fill();
-  ctx.restore();
 
   scene.allocations.forEach((allocation) => {
     drawOrbitSegments(ctx, centerX, centerY, allocation.orbitPoints, false, allocation.color);
@@ -1070,8 +1065,6 @@ function drawConstellationScene(scene) {
   ctx.fillStyle = "rgba(255, 250, 255, 0.52)";
   ctx.font = "500 11px \"Plus Jakarta Sans\", sans-serif";
   ctx.fillText("Earth-centered, illustrative rather than orbital-propagated", 18, 46);
-  ctx.fillStyle = "rgba(255, 199, 122, 0.92)";
-  ctx.fillText("Sunlight", width * 0.77, height * 0.125);
 }
 
 function sunlightTendencyLabel(betaDeg) {
@@ -1091,6 +1084,32 @@ function renderConstellationFamilyCards(allocations, totalSatellites) {
           <h4>${allocation.betaDeg}° Beta Family</h4>
           <p><strong>${new Intl.NumberFormat("en-US").format(allocation.count)}</strong> satellites (${pct.toFixed(1)}% of fleet).</p>
           <p>${sunlightTendencyLabel(allocation.betaDeg)}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderConstellationInsights(allocations, totalSatellites, inputs) {
+  els.constellationInsights.innerHTML = allocations
+    .map((allocation) => {
+      const sharePct = totalSatellites > 0 ? (100 * allocation.count) / totalSatellites : 0;
+      const sunlight = sunlightFractionForBeta(inputs.altitude_km, allocation.betaDeg);
+      const color = BETA_COLOR_SCALE[allocation.betaDeg] || THEME_COLORS.fallback;
+      return `
+        <article class="constellation-insight-card">
+          <div class="constellation-insight-head">
+            <h4><span class="beta-dot" style="background:${color}"></span>${allocation.betaDeg}° beta</h4>
+            <strong>${allocation.count.toLocaleString()}</strong>
+          </div>
+          <p>${sharePct.toFixed(1)}% of the fleet</p>
+          <div class="constellation-insight-metric">
+            <span>Sunlight fraction</span>
+            <strong>${(sunlight * 100).toFixed(1)}%</strong>
+          </div>
+          <div class="constellation-insight-bar" aria-hidden="true">
+            <span style="width:${(sunlight * 100).toFixed(1)}%; background:${color}"></span>
+          </div>
         </article>
       `;
     })
@@ -1142,6 +1161,7 @@ function renderConstellationChart(result, inputs) {
     `Orbit-family allocation by beta mix: ${mixSummary}. Displaying ${new Intl.NumberFormat("en-US").format(displayTotal)} sampled satellites in a lightweight 2D perspective sketch. ` +
     `This is a beta-bin representation for visual intuition, not a full orbital mechanics propagation.`;
 
+  renderConstellationInsights(allocations, result.satellites_needed, inputs);
   renderConstellationFamilyCards(allocations, result.satellites_needed);
 }
 

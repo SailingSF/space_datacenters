@@ -515,7 +515,7 @@ select {
 }
 
 .constellation-chart {
-  min-height: 420px;
+  min-height: 380px;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(164, 140, 216, 0.22);
@@ -526,7 +526,7 @@ select {
 .constellation-canvas {
   width: 100%;
   height: 100%;
-  min-height: 420px;
+  min-height: 380px;
   display: block;
   border-radius: 14px;
 }
@@ -572,6 +572,76 @@ select {
   display: grid;
   gap: 0.45rem;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.constellation-insights {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.constellation-insight-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: linear-gradient(180deg, #fff9ff 0%, #fffdfd 100%);
+}
+
+.constellation-insight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.constellation-insight-head h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.constellation-insight-head strong {
+  font-size: 0.9rem;
+}
+
+.constellation-insight-card p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.constellation-insight-metric {
+  margin-top: 0.55rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.constellation-insight-metric span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.constellation-insight-metric strong {
+  font-size: 0.88rem;
+}
+
+.constellation-insight-bar {
+  margin-top: 0.35rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #efe8f8;
+}
+
+.constellation-insight-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
 }
 
 .constellation-family-card {
