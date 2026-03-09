@@ -80,7 +80,8 @@ const els = {
   referenceMeta: document.getElementById("reference-meta"),
   referenceInputs: document.getElementById("reference-inputs"),
   referenceOutputs: document.getElementById("reference-outputs"),
-  referenceDiff: document.getElementById("reference-diff")
+  referenceDiff: document.getElementById("reference-diff"),
+  sourceFootnotesList: document.getElementById("source-footnotes-list")
 };
 
 const BETA_COLOR_SCALE = {
@@ -169,6 +170,14 @@ function applyRangeConfig(inputEl, valueEl, config, formatter) {
   valueEl.textContent = formatter(config.default);
 }
 
+function formatReferenceTokens(ids, options = {}) {
+  const { linked = false } = options;
+  if (!Array.isArray(ids) || ids.length === 0) return "";
+  return ids
+    .map((id) => (linked ? `<a class="footnote-token" href="#ref-${id}">[${id}]</a>` : `[${id}]`))
+    .join(" ");
+}
+
 function applyParameterTooltips(defaults) {
   const ranges = defaults.ranges;
   const betaDefaultKey = ranges.beta_preset.default;
@@ -176,49 +185,54 @@ function applyParameterTooltips(defaults) {
   const activeLaunchPreset = defaults.launch_cost_presets[els.launchPreset.value];
   const launchDefaultKey = ranges.launch_preset.default;
   const launchDefaultLabel = defaults.launch_cost_presets[launchDefaultKey]?.label || launchDefaultKey;
+  const parameterRefMap = defaults.parameter_reference_map || {};
+  const withRefs = (key, text) => {
+    const refs = formatReferenceTokens(parameterRefMap[key]);
+    return refs ? `${text} Sources: ${refs}.` : text;
+  };
 
   const tooltips = {
-    datacenter_mw:
+    datacenter_mw: withRefs("datacenter_mw",
       `How much terrestrial datacenter power you want space infrastructure to replace. ` +
-      `Larger values scale satellites and total cost. Good default: ${ranges.datacenter_mw.default} MW.`,
-    altitude_km:
+      `Larger values scale satellites and total cost. Good default: ${ranges.datacenter_mw.default} MW.`),
+    altitude_km: withRefs("altitude_km",
       `Target orbital altitude for the constellation. Higher altitude can shift launch cost and fleet sizing. ` +
-      `Good default: ${ranges.altitude_km.default} km.`,
-    gpu_temp_c:
+      `Good default: ${ranges.altitude_km.default} km.`),
+    gpu_temp_c: withRefs("gpu_temp_c",
       `Estimated operating temperature of the GPU heat source. This affects radiator performance and mass. ` +
-      `Good default: ${ranges.gpu_temp_c.default} °C.`,
-    transport_delta_t_c:
+      `Good default: ${ranges.gpu_temp_c.default} °C.`),
+    transport_delta_t_c: withRefs("transport_delta_t_c",
       `Temperature drop budget between the GPU source and the radiator surface. ` +
       `Higher values make radiator rejection easier in this simplified model. ` +
-      `Good default: ${ranges.transport_delta_t_c.default} °C.`,
-    overhead_frac:
+      `Good default: ${ranges.transport_delta_t_c.default} °C.`),
+    overhead_frac: withRefs("overhead_frac",
       `Extra non-compute electrical load fraction (power conversion, pumping, controls, and support systems). ` +
-      `Good default: ${(ranges.overhead_frac.default * 100).toFixed(0)}%.`,
-    launch_preset:
+      `Good default: ${(ranges.overhead_frac.default * 100).toFixed(0)}%.`),
+    launch_preset: withRefs("launch_preset",
       `Select a notebook-anchored launch package. It sets the baseline $/kg to 550 km plus the transfer Isp and propulsion dry-mass assumptions used to compute altitude penalties. ` +
-      `Good default: ${launchDefaultLabel}.`,
-    launch_base_cost_per_kg:
+      `Good default: ${launchDefaultLabel}. Future Starship-style options here are sensitivity cases, not current procurement quotes.`),
+    launch_base_cost_per_kg: withRefs("launch_base_cost_per_kg",
       `Launch price per kg to the preset baseline altitude before the notebook's Hohmann-transfer mass multiplier is applied. ` +
-      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.base_cost_per_kg, { compact: false })} / kg).`,
-    isp_transfer_s:
+      `Good default: use the active preset value (${formatCurrency(activeLaunchPreset.base_cost_per_kg, { compact: false })} / kg).`),
+    isp_transfer_s: withRefs("isp_transfer_s",
       `Specific impulse for the altitude-raising kick stage or tug equivalent. Higher Isp lowers the mass multiplier for higher orbits. ` +
-      `Good default: ${activeLaunchPreset.isp_s.toFixed(0)} s.`,
-    propulsion_struct_frac:
+      `Good default: ${activeLaunchPreset.isp_s.toFixed(0)} s.`),
+    propulsion_struct_frac: withRefs("propulsion_struct_frac",
       `Kick-stage dry mass as a fraction of propellant mass. Higher values make altitude changes more expensive because more dry hardware must also be launched. ` +
-      `Good default: ${(activeLaunchPreset.propulsion_struct_frac * 100).toFixed(0)}%.`,
-    array_specific_power_w_per_kg:
+      `Good default: ${(activeLaunchPreset.propulsion_struct_frac * 100).toFixed(0)}%.`),
+    array_specific_power_w_per_kg: withRefs("array_specific_power_w_per_kg",
       `Solar array watts delivered per kg of array mass. Higher values reduce array mass and therefore reduce launch cost too. ` +
-      `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg.`,
-    epsilon:
+      `Good default: ${ranges.array_specific_power_w_per_kg.default} W/kg. Values meaningfully above the 200 W/kg notebook anchor should be treated as future sensitivity cases rather than current public anchors.`),
+    epsilon: withRefs("epsilon",
       `Radiator emissivity. Higher emissivity improves heat rejection per square meter, which reduces radiator area and mass. ` +
-      `Good default: ${ranges.epsilon.default.toFixed(2)}.`,
-    radiator_areal_density_kg_per_m2:
+      `Good default: ${ranges.epsilon.default.toFixed(2)}.`),
+    radiator_areal_density_kg_per_m2: withRefs("radiator_areal_density_kg_per_m2",
       `Radiator mass per square meter. Higher values make the same radiator area heavier and increase both satellite mass and launch spend. ` +
-      `Good default: ${ranges.radiator_areal_density_kg_per_m2.default.toFixed(1)} kg/m².`,
-    beta_preset:
+      `Good default: ${ranges.radiator_areal_density_kg_per_m2.default.toFixed(1)} kg/m².`),
+    beta_preset: withRefs("beta_preset",
       `Distribution of orbital beta angles used to estimate sunlight availability across the constellation. ` +
       `Lower beta angles generally include more eclipse time, while higher beta angles tend to have longer sunlit windows. ` +
-      `Good default: ${betaDefaultLabel}.`
+      `Good default: ${betaDefaultLabel}.`)
   };
 
   document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
@@ -237,6 +251,21 @@ function renderParameterAnchorCards(defaults) {
         <p class="parameter-anchor-title">${card.title}</p>
         <strong>${card.value}</strong>
         <p>${card.detail}</p>
+        <p class="parameter-anchor-refs">${formatReferenceTokens(card.refs, { linked: true })}</p>
+      </article>
+    `)
+    .join("");
+}
+
+function renderSourceFootnotes(defaults) {
+  const refs = defaults.references || [];
+  els.sourceFootnotesList.innerHTML = refs
+    .map((ref) => `
+      <article class="source-footnote" id="ref-${ref.id}">
+        <p class="source-footnote-id">[${ref.id}] ${ref.category}</p>
+        <h3>${ref.title}</h3>
+        <p>${ref.detail}</p>
+        ${ref.url ? `<a href="${ref.url}" target="_blank" rel="noopener noreferrer">Open source</a>` : `<span class="source-footnote-note">Notebook assumption / derivation note</span>`}
       </article>
     `)
     .join("");
@@ -1403,6 +1432,7 @@ function configureControls(defaults) {
     .join(" | ");
   applyParameterTooltips(defaults);
   renderParameterAnchorCards(defaults);
+  renderSourceFootnotes(defaults);
   configureBetaEditor(defaults);
   els.constellationSpeed.value = state.constellationSpeedRps;
   updateConstellationSpeedLabel();
