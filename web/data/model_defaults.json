@@ -1,9 +1,9 @@
 {
   "constants": {
-    "P_COMPUTE_KW": 132.0,
+    "P_COMPUTE_KW": 120.0,
     "OVERHEAD_FRAC": 0.1,
-    "M_COMPUTE_KG": 100.0,
-    "COMPUTE_COST_PER_KW": 16000.0,
+    "M_COMPUTE_KG": 750.0,
+    "COMPUTE_COST_PER_KW": 22500.0,
     "T_GPU_C": 90.0,
     "DELTA_T_TO_RADIATOR_C": 30.0,
     "EPSILON": 0.9,
@@ -27,6 +27,7 @@
     "BETA_DEG": 0.0,
     "COST_TO_BASELINE_PER_KG": 2500.0,
     "ISP_TRANSFER_S": 320.0,
+    "PROPULSION_STRUCT_FRAC": 0.12,
     "CONSTELLATION_BETA_MIX": [
       [0.0, 0.3],
       [30.0, 0.45],
@@ -35,16 +36,19 @@
     ]
   },
   "ranges": {
-    "datacenter_mw": { "min": 50, "max": 2000, "step": 10, "default": 100 },
+    "datacenter_mw": { "min": 10, "max": 2000, "step": 10, "default": 100 },
     "altitude_km": { "min": 300, "max": 20000, "step": 50, "default": 7000 },
     "gpu_temp_c": { "min": 70, "max": 130, "step": 1, "default": 90 },
     "transport_delta_t_c": { "min": 10, "max": 50, "step": 1, "default": 30 },
     "overhead_frac": { "min": 0.02, "max": 0.4, "step": 0.01, "default": 0.1 },
-    "launch_base_cost_per_kg": { "min": 50, "max": 12000, "step": 50, "default": 3170 },
-    "launch_incremental_cost_per_kg_per_km": { "min": 0, "max": 2, "step": 0.01, "default": 0.15 },
+    "launch_base_cost_per_kg": { "min": 50, "max": 12000, "step": 50, "default": 2500 },
+    "isp_transfer_s": { "min": 200, "max": 3000, "step": 10, "default": 320 },
+    "propulsion_struct_frac": { "min": 0, "max": 0.25, "step": 0.01, "default": 0.12 },
     "array_specific_power_w_per_kg": { "min": 80, "max": 500, "step": 5, "default": 200 },
+    "epsilon": { "min": 0.6, "max": 0.98, "step": 0.01, "default": 0.9 },
+    "radiator_areal_density_kg_per_m2": { "min": 0.5, "max": 10, "step": 0.1, "default": 2.0 },
     "beta_preset": { "default": "coverage_optimized" },
-    "launch_preset": { "default": "falcon9_dedicated_current" }
+    "launch_preset": { "default": "notebook_midrange_reusable" }
   },
   "beta_mix_presets": {
     "coverage_optimized": {
@@ -64,35 +68,72 @@
     }
   },
   "launch_cost_presets": {
-    "falcon9_dedicated_current": {
-      "label": "Falcon 9 dedicated (current list-price inspired)",
+    "notebook_midrange_reusable": {
+      "label": "Notebook mid-range reusable anchor",
       "base_alt_km": 550,
-      "base_cost_per_kg": 3170,
-      "incremental_cost_per_kg_per_km": 0.15,
+      "base_cost_per_kg": 2500,
+      "isp_s": 320,
+      "propulsion_struct_frac": 0.12,
       "source_links": [
         {
-          "label": "SpaceX Capabilities and Services",
-          "url": "https://www.spacex.com/media/Capabilities%26Services.pdf"
+          "label": "SpaceX Falcon User Guide",
+          "url": "https://www.spacex.com/media/falcon-users-guide-2025-05-09.pdf"
+        },
+        {
+          "label": "CSIS launch cost comparison",
+          "url": "https://aerospace.csis.org/data/space-launch-to-low-earth-orbit-how-much-does-it-cost/"
         }
       ]
     },
-    "transporter_rideshare_current": {
-      "label": "Transporter rideshare style (small payload pricing)",
+    "falcon9_reusable_reference": {
+      "label": "Falcon 9 reusable reference",
       "base_alt_km": 550,
-      "base_cost_per_kg": 6500,
-      "incremental_cost_per_kg_per_km": 0.05,
+      "base_cost_per_kg": 4000,
+      "isp_s": 320,
+      "propulsion_struct_frac": 0.12,
       "source_links": [
         {
-          "label": "SpaceX Rideshare pricing",
-          "url": "https://www.spacex.com/rideshare/"
+          "label": "SpaceX Falcon User Guide",
+          "url": "https://www.spacex.com/media/falcon-users-guide-2025-05-09.pdf"
         }
       ]
     },
-    "starship_future_sensitivity": {
-      "label": "Future low-cost Starship sensitivity (assumption)",
+    "falconheavy_reusable_reference": {
+      "label": "Falcon Heavy reusable reference",
       "base_alt_km": 550,
-      "base_cost_per_kg": 250,
-      "incremental_cost_per_kg_per_km": 0.02,
+      "base_cost_per_kg": 1500,
+      "isp_s": 320,
+      "propulsion_struct_frac": 0.12,
+      "source_links": [
+        {
+          "label": "CSIS launch cost comparison",
+          "url": "https://aerospace.csis.org/data/space-launch-to-low-earth-orbit-how-much-does-it-cost/"
+        }
+      ]
+    },
+    "starship_early_ops_sensitivity": {
+      "label": "Starship early-ops sensitivity",
+      "base_alt_km": 550,
+      "base_cost_per_kg": 1000,
+      "isp_s": 320,
+      "propulsion_struct_frac": 0.12,
+      "source_links": [
+        {
+          "label": "SpaceX Starship overview",
+          "url": "https://www.spacex.com/vehicles/starship/"
+        },
+        {
+          "label": "CSIS launch cost comparison",
+          "url": "https://aerospace.csis.org/data/space-launch-to-low-earth-orbit-how-much-does-it-cost/"
+        }
+      ]
+    },
+    "starship_mature_reuse_sensitivity": {
+      "label": "Starship mature-reuse sensitivity",
+      "base_alt_km": 550,
+      "base_cost_per_kg": 100,
+      "isp_s": 320,
+      "propulsion_struct_frac": 0.12,
       "source_links": [
         {
           "label": "SpaceX Starship overview",
@@ -101,6 +142,33 @@
       ]
     }
   },
+  "parameter_reference_cards": [
+    {
+      "title": "Launch cost anchor",
+      "value": "$2,500/kg to 550 km",
+      "detail": "Notebook default is a mid-range reusable-launch anchor between Falcon 9 and Falcon Heavy reference points, then scales nonlinearly with transfer delta-v."
+    },
+    {
+      "title": "In-space transfer efficiency",
+      "value": "320 s Isp, 12% dry-mass fraction",
+      "detail": "Matches the notebook kick-stage assumption for converting altitude changes into equivalent launched mass."
+    },
+    {
+      "title": "Solar array mass efficiency",
+      "value": "200 W/kg",
+      "detail": "Anchored to the notebook's Solestial-style next-generation 50 kW-class array reference."
+    },
+    {
+      "title": "Radiator efficiency",
+      "value": "0.90 emissivity",
+      "detail": "Notebook reference uses OSR-like radiator performance with 0.90 emissivity and 0.20 solar absorptivity."
+    },
+    {
+      "title": "Radiator weight",
+      "value": "2.0 kg/m²",
+      "detail": "First-pass notebook assumption for radiator areal density. Higher values increase both hardware mass and launch cost."
+    }
+  ],
   "formatting": {
     "currency": "USD",
     "locale": "en-US"
